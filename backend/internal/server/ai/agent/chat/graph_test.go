@@ -18,7 +18,7 @@ import (
 func TestGraphConstruction(t *testing.T) {
 	config, err := config.InitConfig("../../../../../config/config.json")
 	if err != nil {
-		t.Fatalf("Failed to init config: %v", err)
+		t.Skipf("integration config unavailable: %v", err)
 	}
 	ctx := context.Background()
 	indexer, err := initQdrantRepo.NewQdrantIndexer(ctx, config)

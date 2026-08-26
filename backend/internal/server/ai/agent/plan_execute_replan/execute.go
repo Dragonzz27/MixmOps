@@ -1,6 +1,7 @@
 package planexecutereplan
 
 import (
+	kuberepo "AutoOps/internal/repo/kubernetes"
 	"AutoOps/internal/server/ai/tools"
 	"AutoOps/pkg/config"
 	"context"
@@ -13,7 +14,7 @@ import (
 	"github.com/cloudwego/eino/compose"
 )
 
-func NewExecuteAgent(ctx context.Context, model *openai.ChatModel, cfg *config.Config, retriever *qdrant_retriever.Retriever) (adk.Agent, error) {
+func NewExecuteAgent(ctx context.Context, model *openai.ChatModel, cfg *config.Config, retriever *qdrant_retriever.Retriever, repositories ...kuberepo.KubernetesRepository) (adk.Agent, error) {
 	// 初始化 RAG 工具
 	if retriever != nil {
 		tools.InitRAGTool(retriever)
@@ -35,13 +36,12 @@ func NewExecuteAgent(ctx context.Context, model *openai.ChatModel, cfg *config.C
 		return nil, err
 	}
 	toolls = append(toolls, promethesTool)
-	// 接入腾讯云日志服务 CLS MCP，拉取其暴露的全部日志查询工具
-	if cfg.CLSMcp.Enabled {
-		logMcpTools, err := tools.GetLogMcpTool(ctx, cfg.GetCLSMcpURL())
+	if len(repositories) > 0 && repositories[0] != nil {
+		kubeTools, err := tools.NewKubernetesTools(repositories[0], cfg.Kubernetes.Namespace)
 		if err != nil {
 			return nil, err
 		}
-		toolls = append(toolls, logMcpTools...)
+		toolls = append(toolls, kubeTools...)
 	}
 	return planexecute.NewExecutor(ctx, &planexecute.ExecutorConfig{
 		Model: model,

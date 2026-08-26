@@ -9,6 +9,8 @@ import (
 	"math"
 	"math/rand"
 	"net/http"
+	"os"
+	"sync/atomic"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -116,6 +118,8 @@ func init() {
 
 type scenario int
 
+var forcedScenario int32 = int32(scAlert)
+
 const (
 	scNormal   scenario = iota // 正常
 	scDegraded                 // 轻微降级
@@ -123,8 +127,11 @@ const (
 )
 
 func currentScenario(t time.Time) scenario {
-	// 强制全天候处于告警状态，方便测试
-	return scAlert
+	value := scenario(atomic.LoadInt32(&forcedScenario))
+	if value < scNormal || value > scAlert {
+		return scAlert
+	}
+	return value
 }
 
 func scenarioName(s scenario) string {
@@ -237,11 +244,25 @@ func main() {
 		fmt.Fprintln(w, "  90~150s : 轻微降级（错误率 8%，延迟 300ms）")
 		fmt.Fprintln(w, "  150~180s: 告警（错误率 35%，延迟 1.5s，CPU 85%，队列积压）")
 	})
+	http.HandleFunc("/scenario", func(w http.ResponseWriter, r *http.Request) {
+		name := r.URL.Query().Get("name")
+		values := map[string]scenario{"normal": scNormal, "degraded": scDegraded, "alert": scAlert}
+		value, ok := values[name]
+		if !ok {
+			http.Error(w, "name must be normal, degraded, or alert", http.StatusBadRequest)
+			return
+		}
+		atomic.StoreInt32(&forcedScenario, int32(value))
+		fmt.Fprintf(w, "scenario=%s\n", name)
+	})
 
+	if value, ok := map[string]scenario{"normal": scNormal, "degraded": scDegraded, "alert": scAlert}[os.Getenv("AUTOOPS_TEST_SCENARIO")]; ok {
+		atomic.StoreInt32(&forcedScenario, int32(value))
+	}
 	addr := ":2112"
 	log.Printf("Prometheus 测试服务器启动，监听 %s", addr)
 	log.Printf("Prometheus scrape_configs 配置示例：")
-	log.Printf("  - job_name: 'oncall-test'")
+	log.Printf("  - job_name: 'autoops-test'")
 	log.Printf("    static_configs:")
 	log.Printf("      - targets: ['localhost:2112']")
 	log.Fatal(http.ListenAndServe(addr, nil))

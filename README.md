@@ -58,6 +58,7 @@ AutoOps 是一个面向运维场景的智能代理系统，深度融合三种 AI
 - [Qdrant](https://qdrant.tech/) (向量数据库)
 - OpenAI 兼容 API (LLM 服务)
 - Prometheus (可选，用于告警分析)
+- Minikube + Helm（用于模拟 Kubernetes 运维场景）
 
 ### 安装步骤
 
@@ -104,6 +105,22 @@ go run ./cmd
 docker-compose -f docker-compose.prometheus.yml up -d
 ```
 
+### 推荐：使用 Minikube 模拟运维集群
+
+AutoOps 在宿主机运行，Minikube 只承载测试业务服务和监控组件。Qdrant、Ollama 等中间件继续单独使用 Docker 启动。
+
+```bash
+minikube start
+eval $(minikube docker-env)
+docker build -t autoops-prometheus-test-server:local -f backend/prometheusTestServer/Dockerfile backend
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm install monitoring prometheus-community/kube-prometheus-stack -n monitoring --create-namespace \
+  --set prometheus.service.type=NodePort --set prometheus.service.nodePort=30900
+helm upgrade --install autoops-test ./deploy/helm/autoops-test
+```
+
+将 `backend/config/config_template.json` 复制为 `config.json`，配置 Minikube Prometheus 的 NodePort 地址，并配置本机 kubeconfig。AutoOps 通过 Kubernetes API 查询 Pod、Deployment、Events 和 Pod 日志，不执行写操作。
+
 ## 配置说明
 
 ### backend/config/config.json
@@ -131,7 +148,14 @@ docker-compose -f docker-compose.prometheus.yml up -d
     "api_base": "https://api.openai.com/v1"
   },
   "prometheus": {
-    "url": "http://localhost:9090"
+    "url": "http://127.0.0.1:30900"
+  },
+  "kubernetes": {
+    "enabled": true,
+    "kubeconfig": "",
+    "context": "",
+    "namespace": "autoops-test",
+    "in_cluster": false
   }
 }
 ```
@@ -143,6 +167,9 @@ docker-compose -f docker-compose.prometheus.yml up -d
 | `qdrant.*` | Qdrant 向量数据库配置 |
 | `openai.*` | LLM API 配置 (兼容 OpenAI 格式) |
 | `prometheus.url` | Prometheus 服务地址 |
+| `kubernetes.*` | Minikube kubeconfig、context、namespace 和启用开关 |
+
+也可以使用环境变量覆盖 Kubernetes 连接：`AUTOOPS_K8S_KUBECONFIG`、`AUTOOPS_K8S_CONTEXT`、`AUTOOPS_K8S_NAMESPACE`、`AUTOOPS_K8S_ENABLED`。AutoOps 只需要以下只读权限：`get/list/watch` pods、deployments、events，以及 `get` pods/log。
 
 ## API 文档
 
@@ -268,11 +295,12 @@ AutoOps/
 │       └── plan/               # 运维计划服务
 │   ├── pkg/                    # 配置、日志和通用工具
 │   ├── scripts/                # 后端辅助脚本
-│   ├── prometheusTestServer/   # Prometheus 测试服务器
+│   ├── prometheusTestServer/   # Prometheus 测试服务器镜像
 │   ├── go.mod
 │   └── go.sum
 ├── prometheus_config/          # Prometheus 配置
-└── docker-compose.prometheus.yml
+├── deploy/helm/autoops-test/   # Minikube 测试 Helm Chart
+└── docker-compose.prometheus.yml # 兼容的 Docker Prometheus 方案
 ```
 
 ## 核心组件

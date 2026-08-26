@@ -1,6 +1,7 @@
 package planexecutereplan
 
 import (
+	kuberepo "AutoOps/internal/repo/kubernetes"
 	"AutoOps/pkg/config"
 	"context"
 
@@ -11,12 +12,12 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
-func BuildPlanExecuteReplanAgent(ctx context.Context, query string, cfg config.Config, model *openai.ChatModel, retriever *qdrant_retriever.Retriever) (string, []string, error) {
+func BuildPlanExecuteReplanAgent(ctx context.Context, query string, cfg config.Config, model *openai.ChatModel, retriever *qdrant_retriever.Retriever, repositories ...kuberepo.KubernetesRepository) (string, []string, error) {
 	planAgent, err := NewPlanAgent(ctx, model)
 	if err != nil {
 		return "", nil, err
 	}
-	executeAgent, err := NewExecuteAgent(ctx, model, &cfg, retriever)
+	executeAgent, err := NewExecuteAgent(ctx, model, &cfg, retriever, repositories...)
 	if err != nil {
 		return "", nil, err
 	}

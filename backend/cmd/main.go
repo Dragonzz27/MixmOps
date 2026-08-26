@@ -1,6 +1,7 @@
 package main
 
 import (
+	kuberepo "AutoOps/internal/repo/kubernetes"
 	indexerr "AutoOps/internal/repo/qrdant/indexer"
 	initQdrantRepo "AutoOps/internal/repo/qrdant/init"
 	"AutoOps/internal/repo/qrdant/retriever"
@@ -8,6 +9,7 @@ import (
 	"AutoOps/internal/server/ai/agent/chat"
 	knowledgeindex "AutoOps/internal/server/ai/agent/knowledge_index"
 	"AutoOps/internal/server/ai/embeder"
+	aitools "AutoOps/internal/server/ai/tools"
 	"AutoOps/internal/server/model"
 	"AutoOps/pkg/config"
 	"AutoOps/pkg/log"
@@ -26,6 +28,11 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	kubernetes, err := kuberepo.NewRepository(config.Kubernetes)
+	if err != nil {
+		log.Warnf("Kubernetes integration unavailable; continuing without cluster tools: %v", err)
+		kubernetes = nil
+	}
 	//初始化qdrant
 	indexer, err := initQdrantRepo.NewQdrantIndexer(ctx, config)
 	if err != nil {
@@ -42,8 +49,9 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	aitools.InitRAGTool(run)
 	//初始化chatAgent
-	re := chat.NewChatServer(run, config)
+	re := chat.NewChatServer(run, config, kubernetes)
 	runner, err := re.BuildChatAgent(ctx)
 	if err != nil {
 		panic(err)
@@ -67,7 +75,7 @@ func main() {
 	}
 	// 初始化gin
 	r := gin.Default()
-	router.InitRouter(ctx, r, log, config, runnerRAG, runner, chatModel, run)
+	router.InitRouter(ctx, r, log, config, runnerRAG, runner, chatModel, run, kubernetes)
 	// 启动 HTTP 服务
 	addr := fmt.Sprintf("%s:%d", config.Server.Host, config.Server.Port)
 	if err = r.Run(addr); err != nil {

@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: autoops-test-server
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/name: autoops-test-server
+    app.kubernetes.io/part-of: autoops
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: autoops-test-server
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: autoops-test-server
+        app.kubernetes.io/part-of: autoops
+    spec:
+      containers:
+        - name: test-server
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: AUTOOPS_TEST_SCENARIO
+              value: {{ .Values.scenario | quote }}
+          ports:
+            - name: metrics
+              containerPort: 2112
+          readinessProbe:
+            httpGet: { path: /metrics, port: metrics }
+          livenessProbe:
+            httpGet: { path: /metrics, port: metrics }

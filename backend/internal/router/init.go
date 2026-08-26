@@ -2,6 +2,7 @@ package router
 
 import (
 	"AutoOps/internal/handler"
+	kuberepo "AutoOps/internal/repo/kubernetes"
 	"AutoOps/internal/server/ai/agent/chat"
 	"AutoOps/internal/server/chatServer"
 	knowledgeindex "AutoOps/internal/server/knowledge_index"
@@ -19,7 +20,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func InitRouter(ctx context.Context, r *gin.Engine, loger *logrus.Logger, config *config.Config, runner compose.Runnable[document.Source, bool], runnerChat compose.Runnable[*chat.UserMessage, *schema.Message], model *openai.ChatModel, retriever *qdrant_retriever.Retriever) {
+func InitRouter(ctx context.Context, r *gin.Engine, loger *logrus.Logger, config *config.Config, runner compose.Runnable[document.Source, bool], runnerChat compose.Runnable[*chat.UserMessage, *schema.Message], model *openai.ChatModel, retriever *qdrant_retriever.Retriever, repositories ...kuberepo.KubernetesRepository) {
 	//cors
 	corsConfig := cors.DefaultConfig()
 	corsConfig.AllowOrigins = []string{"*"}
@@ -41,7 +42,7 @@ func InitRouter(ctx context.Context, r *gin.Engine, loger *logrus.Logger, config
 	r.POST("/chat", chaterHandler.Chat())
 	r.POST("/chatStream", chaterHandler.ChatSream())
 	//运维
-	planer := plan.NewPlanServer(*config, model, loger, retriever)
+	planer := plan.NewPlanServer(*config, model, loger, retriever, repositories...)
 	planerH := handler.NewPlanHandler(planer)
 	r.GET("/plan", planerH.Plan())
 }

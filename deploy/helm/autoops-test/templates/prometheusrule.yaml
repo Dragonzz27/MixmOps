@@ -1,0 +1,35 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: autoops-test-alerts
+  namespace: {{ .Values.namespace }}
+  labels:
+    release: {{ .Values.monitoring.prometheusRelease }}
+spec:
+  groups:
+    - name: autoops-test.rules
+      rules:
+        - alert: AutoOpsHighErrorRate
+          expr: max(error_rate_per_minute{namespace="{{ .Values.namespace }}"}) > 20
+          for: {{ .Values.monitoring.alertFor }}
+          labels: { severity: warning }
+          annotations:
+            description: "测试服务错误率超过 20%"
+        - alert: AutoOpsHighLatency
+          expr: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{namespace="{{ .Values.namespace }}"}[5m])) by (le)) > 1
+          for: {{ .Values.monitoring.alertFor }}
+          labels: { severity: warning }
+          annotations:
+            description: "测试服务 P95 延迟超过 1 秒"
+        - alert: AutoOpsPodRestarting
+          expr: increase(kube_pod_container_status_restarts_total{namespace="{{ .Values.namespace }}"}[10m]) > 2
+          for: {{ .Values.monitoring.alertFor }}
+          labels: { severity: critical }
+          annotations:
+            description: "测试命名空间 Pod 在 10 分钟内重启超过 2 次"
+        - alert: AutoOpsDeploymentUnavailable
+          expr: kube_deployment_status_replicas_available{namespace="{{ .Values.namespace }}"} < kube_deployment_spec_replicas{namespace="{{ .Values.namespace }}"}
+          for: {{ .Values.monitoring.alertFor }}
+          labels: { severity: critical }
+          annotations:
+            description: "Deployment 可用副本少于期望副本"

@@ -156,14 +156,8 @@ func TestTextToQdrantIndex_SkipsNoHeading(t *testing.T) {
 	if !ok {
 		t.Error("期望返回 true")
 	}
-	if mockQdrant.capturedPts == nil {
-		t.Fatal("未调用 AddVector")
-	}
-	// 所有文档均被跳过，points 应全为 nil
-	for i, pt := range mockQdrant.capturedPts.Points {
-		if pt != nil {
-			t.Errorf("doc[%d] 无标题前缀，不应生成 PointStruct，但得到: %+v", i, pt)
-		}
+	if mockQdrant.capturedPts != nil {
+		t.Fatal("无标题文档不应调用 AddVector")
 	}
 }
 

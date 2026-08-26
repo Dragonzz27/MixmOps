@@ -1,0 +1,13 @@
+namespace: autoops-test
+image:
+  repository: autoops-prometheus-test-server
+  tag: local
+  pullPolicy: IfNotPresent
+service:
+  port: 2112
+  nodePort: 32112
+monitoring:
+  prometheusRelease: monitoring
+  interval: 5s
+  alertFor: 30s
+scenario: alert

@@ -20,10 +20,13 @@
     "api_base": "https://api.qnaigc.com/v1"
   },
   "prometheus": {
-    "url": "http://localhost:9090"
+    "url": "http://127.0.0.1:30900"
   },
-  "cls_mcp": {
-    "base_url": "http://localhost:3100/sse",
-    "enabled": true
+  "kubernetes": {
+    "enabled": true,
+    "kubeconfig": "",
+    "context": "",
+    "namespace": "autoops-test",
+    "in_cluster": false
   }
 }

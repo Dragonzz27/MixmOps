@@ -29,15 +29,20 @@ func (u chatServer) newReactAgentLambda(ctx context.Context) (node *compose.Lamb
 	if err != nil {
 		return nil, err
 	}
-	// 初始化所需的 tools
-	tools := compose.ToolsNodeConfig{
-		Tools: []tool.BaseTool{timeTool, retrieveTool, promethesTool},
+	allTools := []tool.BaseTool{timeTool, retrieveTool, promethesTool}
+	if u.kubernetes != nil {
+		kubeTools, kubeErr := tools.NewKubernetesTools(u.kubernetes, u.config.Kubernetes.Namespace)
+		if kubeErr != nil {
+			return nil, kubeErr
+		}
+		allTools = append(allTools, kubeTools...)
 	}
+	toolConfig := compose.ToolsNodeConfig{Tools: allTools}
 
 	// 创建 agent
 	agent, err := react.NewAgent(ctx, &react.AgentConfig{
 		ToolCallingModel: toolableChatModel,
-		ToolsConfig:      tools,
+		ToolsConfig:      toolConfig,
 	})
 	node, err = compose.AnyLambda(agent.Generate, agent.Stream, nil, nil)
 	if err != nil {

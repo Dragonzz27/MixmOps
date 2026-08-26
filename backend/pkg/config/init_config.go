@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/spf13/viper"
@@ -14,7 +15,7 @@ type Config struct {
 	Qdrant     QdrantConfig     `mapstructure:"qdrant"`
 	OpenAI     OpenAIConfig     `mapstructure:"openai"`
 	Prometheus PrometheusConfig `mapstructure:"prometheus"`
-	CLSMcp     CLSMcpConfig     `mapstructure:"cls_mcp"`
+	Kubernetes KubernetesConfig `mapstructure:"kubernetes"`
 }
 
 // ServerConfig 服务器配置
@@ -50,12 +51,13 @@ type PrometheusConfig struct {
 	URL string `mapstructure:"url"`
 }
 
-// CLSMcpConfig 腾讯云日志服务 CLS MCP 配置
-type CLSMcpConfig struct {
-	// BaseURL CLS MCP Server 的 SSE 接入地址，例如 http://localhost:3100/sse
-	BaseURL string `mapstructure:"base_url"`
-	// Enabled 是否启用 CLS 日志 MCP 工具
-	Enabled bool `mapstructure:"enabled"`
+// KubernetesConfig controls out-of-cluster access to the local test cluster.
+type KubernetesConfig struct {
+	Enabled    bool   `mapstructure:"enabled"`
+	Kubeconfig string `mapstructure:"kubeconfig"`
+	Context    string `mapstructure:"context"`
+	Namespace  string `mapstructure:"namespace"`
+	InCluster  bool   `mapstructure:"in_cluster"`
 }
 
 // InitConfig 从配置文件初始化配置
@@ -84,6 +86,21 @@ func InitConfig(configFile string) (*Config, error) {
 	var cfg Config
 	if err := v.Unmarshal(&cfg); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
+	}
+	if value := os.Getenv("AUTOOPS_K8S_KUBECONFIG"); value != "" {
+		cfg.Kubernetes.Kubeconfig = value
+	}
+	if value := os.Getenv("KUBECONFIG"); value != "" && cfg.Kubernetes.Kubeconfig == "" {
+		cfg.Kubernetes.Kubeconfig = value
+	}
+	if value := os.Getenv("AUTOOPS_K8S_CONTEXT"); value != "" {
+		cfg.Kubernetes.Context = value
+	}
+	if value := os.Getenv("AUTOOPS_K8S_NAMESPACE"); value != "" {
+		cfg.Kubernetes.Namespace = value
+	}
+	if value := os.Getenv("AUTOOPS_K8S_ENABLED"); value != "" {
+		cfg.Kubernetes.Enabled = strings.EqualFold(value, "true") || value == "1"
 	}
 
 	return &cfg, nil
@@ -114,9 +131,12 @@ func setDefaults(v *viper.Viper) {
 	// Prometheus 默认值
 	v.SetDefault("prometheus.url", "http://localhost:9090")
 
-	// CLS MCP 默认值
-	v.SetDefault("cls_mcp.base_url", "http://localhost:3100/sse")
-	v.SetDefault("cls_mcp.enabled", true)
+	// Kubernetes 默认值
+	v.SetDefault("kubernetes.enabled", true)
+	v.SetDefault("kubernetes.kubeconfig", "")
+	v.SetDefault("kubernetes.context", "")
+	v.SetDefault("kubernetes.namespace", "autoops-test")
+	v.SetDefault("kubernetes.in_cluster", false)
 }
 
 // GetServerAddr 获取服务器完整地址
@@ -140,12 +160,4 @@ func (c *Config) GetPrometheusURL() string {
 		return "http://localhost:9090"
 	}
 	return c.Prometheus.URL
-}
-
-// GetCLSMcpURL 获取 CLS 日志 MCP Server 的 SSE 接入地址
-func (c *Config) GetCLSMcpURL() string {
-	if c.CLSMcp.BaseURL == "" {
-		return "http://localhost:3100/sse"
-	}
-	return c.CLSMcp.BaseURL
 }
