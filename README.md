@@ -83,16 +83,17 @@ docker run -p 6333:6333 -p 6334:6334 qdrant/qdrant
 复制配置模板并修改：
 
 ```bash
-cp config/config_template.json config/config.json
+cp backend/config/config_template.json backend/config/config.json
 ```
 
-编辑 `config/config.json`，填入你的 API Key 和服务地址。
+编辑 `backend/config/config.json`，填入你的 API Key 和服务地址。
 
 4. **运行服务**
 
 ```bash
+cd backend
 go mod tidy
-go run cmd/main.go
+go run ./cmd
 ```
 
 服务将在 `http://localhost:8819` 启动。
@@ -105,7 +106,7 @@ docker-compose -f docker-compose.prometheus.yml up -d
 
 ## 配置说明
 
-### config/config.json
+### backend/config/config.json
 
 ```json
 {
@@ -231,13 +232,14 @@ GET /plan
 
 ```
 OnCallAgent/
-├── cmd/
+├── backend/                    # Go 后端模块
+│   ├── cmd/
 │   └── main.go                 # 程序入口
-├── config/
+│   ├── config/
 │   ├── config.json             # 配置文件
 │   └── config_template.json    # 配置模板
-├── docs/                       # 知识库文档目录
-├── internal/
+│   ├── docs/                   # 知识库文档目录
+│   ├── internal/
 │   ├── handler/                # HTTP 处理器
 │   │   ├── chat.go
 │   │   ├── file.go
@@ -264,14 +266,13 @@ OnCallAgent/
 │       ├── chatServer/         # 对话服务
 │       ├── knowledge_index/    # 知识库索引服务
 │       └── plan/               # 运维计划服务
-├── pkg/
-│   ├── config/                 # 配置解析
-│   ├── log/                    # 日志组件
-│   └── tool/                   # 工具函数
+│   ├── pkg/                    # 配置、日志和通用工具
+│   ├── scripts/                # 后端辅助脚本
+│   ├── prometheusTestServer/   # Prometheus 测试服务器
+│   ├── go.mod
+│   └── go.sum
 ├── prometheus_config/          # Prometheus 配置
-├── prometheusTestServer/       # 测试服务器
-├── docker-compose.prometheus.yml
-└── go.mod
+└── docker-compose.prometheus.yml
 ```
 
 ## 核心组件
@@ -335,7 +336,7 @@ func NewMyTool() (tool.InvokableTool, error) {
 
 ### 扩展知识库
 
-将 Markdown 文档放入 `docs/` 目录，通过 `/upload` 接口上传。
+将 Markdown 文档放入 `backend/docs/` 目录，通过 `/upload` 接口上传。
 
 文档格式建议：
 - 使用一级标题作为文档标题
