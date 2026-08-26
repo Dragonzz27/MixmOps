@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"OnCallAgent/internal/server/chatServer"
+	"AutoOps/internal/server/chatServer"
 	"fmt"
 
 	"github.com/gin-gonic/gin"

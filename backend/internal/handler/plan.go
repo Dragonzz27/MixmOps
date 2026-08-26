@@ -1,7 +1,7 @@
 package handler
 
 import (
-	planserver "OnCallAgent/internal/server/plan"
+	planserver "AutoOps/internal/server/plan"
 
 	"github.com/gin-gonic/gin"
 )

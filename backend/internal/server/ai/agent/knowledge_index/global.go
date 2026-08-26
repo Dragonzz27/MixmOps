@@ -1,10 +1,10 @@
 package knowledgeindex
 
 import (
-	"OnCallAgent/internal/server/ai/embeder"
+	"AutoOps/internal/server/ai/embeder"
 	"context"
 
-	"OnCallAgent/internal/repo/qrdant/indexer"
+	"AutoOps/internal/repo/qrdant/indexer"
 
 	"github.com/cloudwego/eino/components/document"
 	"github.com/cloudwego/eino/compose"

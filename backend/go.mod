@@ -1,4 +1,4 @@
-module OnCallAgent
+module AutoOps
 
 go 1.25.5
 

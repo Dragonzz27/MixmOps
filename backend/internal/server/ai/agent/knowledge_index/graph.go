@@ -1,7 +1,7 @@
 package knowledgeindex
 
 import (
-	"OnCallAgent/pkg/tool"
+	"AutoOps/pkg/tool"
 	"context"
 	"fmt"
 	"strings"

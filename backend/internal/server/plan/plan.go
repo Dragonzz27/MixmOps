@@ -1,8 +1,8 @@
 package plan
 
 import (
-	planexecutereplan "OnCallAgent/internal/server/ai/agent/plan_execute_replan"
-	"OnCallAgent/pkg/config"
+	planexecutereplan "AutoOps/internal/server/ai/agent/plan_execute_replan"
+	"AutoOps/pkg/config"
 	"context"
 
 	"github.com/cloudwego/eino-ext/components/model/openai"

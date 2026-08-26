@@ -1,7 +1,7 @@
 package model
 
 import (
-	"OnCallAgent/pkg/config"
+	"AutoOps/pkg/config"
 	"context"
 
 	"github.com/cloudwego/eino-ext/components/model/openai"

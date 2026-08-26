@@ -1,7 +1,7 @@
 package handler
 
 import (
-	knowledgeindex "OnCallAgent/internal/server/knowledge_index"
+	knowledgeindex "AutoOps/internal/server/knowledge_index"
 
 	"github.com/gin-gonic/gin"
 )

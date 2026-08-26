@@ -12,7 +12,7 @@
   "qdrant": {
     "host": "127.0.0.1",
     "port": 6334,
-    "collection": "oncallagent"
+    "collection": "autoops"
   },
   "openai": {
     "api_key": "xxx",

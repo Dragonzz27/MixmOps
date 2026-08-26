@@ -1,8 +1,8 @@
 package chat
 
 import (
-	"OnCallAgent/internal/server/ai/tools"
-	"OnCallAgent/internal/server/model"
+	"AutoOps/internal/server/ai/tools"
+	"AutoOps/internal/server/model"
 	"context"
 
 	"github.com/cloudwego/eino/components/tool"

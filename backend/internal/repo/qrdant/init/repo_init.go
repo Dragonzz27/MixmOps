@@ -1,7 +1,7 @@
 package initQdrantRepo
 
 import (
-	"OnCallAgent/pkg/config"
+	"AutoOps/pkg/config"
 	"context"
 
 	"github.com/qdrant/go-client/qdrant"

@@ -29,7 +29,7 @@ func GetLogMcpTool(ctx context.Context, baseURL string) ([]tool.BaseTool, error)
 	initRequest := mcp.InitializeRequest{}
 	initRequest.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
 	initRequest.Params.ClientInfo = mcp.Implementation{
-		Name:    "OnCallAgent",
+		Name:    "AutoOps",
 		Version: "1.0.0",
 	}
 	if _, err = cli.Initialize(ctx, initRequest); err != nil {

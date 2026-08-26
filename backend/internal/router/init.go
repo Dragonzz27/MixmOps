@@ -1,12 +1,12 @@
 package router
 
 import (
-	"OnCallAgent/internal/handler"
-	"OnCallAgent/internal/server/ai/agent/chat"
-	"OnCallAgent/internal/server/chatServer"
-	knowledgeindex "OnCallAgent/internal/server/knowledge_index"
-	"OnCallAgent/internal/server/plan"
-	"OnCallAgent/pkg/config"
+	"AutoOps/internal/handler"
+	"AutoOps/internal/server/ai/agent/chat"
+	"AutoOps/internal/server/chatServer"
+	knowledgeindex "AutoOps/internal/server/knowledge_index"
+	"AutoOps/internal/server/plan"
+	"AutoOps/pkg/config"
 	"context"
 
 	"github.com/cloudwego/eino-ext/components/model/openai"

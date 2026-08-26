@@ -1,16 +1,16 @@
 package main
 
 import (
-	indexerr "OnCallAgent/internal/repo/qrdant/indexer"
-	initQdrantRepo "OnCallAgent/internal/repo/qrdant/init"
-	"OnCallAgent/internal/repo/qrdant/retriever"
-	"OnCallAgent/internal/router"
-	"OnCallAgent/internal/server/ai/agent/chat"
-	knowledgeindex "OnCallAgent/internal/server/ai/agent/knowledge_index"
-	"OnCallAgent/internal/server/ai/embeder"
-	"OnCallAgent/internal/server/model"
-	"OnCallAgent/pkg/config"
-	"OnCallAgent/pkg/log"
+	indexerr "AutoOps/internal/repo/qrdant/indexer"
+	initQdrantRepo "AutoOps/internal/repo/qrdant/init"
+	"AutoOps/internal/repo/qrdant/retriever"
+	"AutoOps/internal/router"
+	"AutoOps/internal/server/ai/agent/chat"
+	knowledgeindex "AutoOps/internal/server/ai/agent/knowledge_index"
+	"AutoOps/internal/server/ai/embeder"
+	"AutoOps/internal/server/model"
+	"AutoOps/pkg/config"
+	"AutoOps/pkg/log"
 	"context"
 	"fmt"
 
@@ -20,7 +20,7 @@ import (
 func main() {
 	ctx := context.Background()
 	// 初始化日志记录器
-	log := log.InitLogger("info", "log/OnCallAgent.log")
+	log := log.InitLogger("info", "log/AutoOps.log")
 	//初始化配置
 	config, err := config.InitConfig("./config/config.json")
 	if err != nil {
@@ -38,7 +38,7 @@ func main() {
 	}
 	//初始化retriever
 	retriever := retriever.NewRetrieverServer(ctx, indexer, *embedder)
-	run, err := retriever.NewRetrieverServer(ctx, "oncallagent", 0.5, 2)
+	run, err := retriever.NewRetrieverServer(ctx, "autoops", 0.5, 2)
 	if err != nil {
 		panic(err)
 	}

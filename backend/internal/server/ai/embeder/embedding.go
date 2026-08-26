@@ -1,7 +1,7 @@
 package embeder
 
 import (
-	"OnCallAgent/pkg/config"
+	"AutoOps/pkg/config"
 	"context"
 	"fmt"
 	"math"

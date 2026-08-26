@@ -1,10 +1,10 @@
-# OnCallAgent
+# AutoOps
 
 智能运维值班代理系统 - 融合 RAG、ReAct 与 Plan-Execute-Replan 三大 AI 范式的智能运维平台。
 
 ## 项目简介
 
-OnCallAgent 是一个面向运维场景的智能代理系统，深度融合三种 AI Agent 核心技术：
+AutoOps 是一个面向运维场景的智能代理系统，深度融合三种 AI Agent 核心技术：
 
 - **RAG (检索增强生成)** - 基于向量数据库的知识检索，将内部运维文档、告警处理手册转化为可检索的知识库，为 Agent 提供领域知识支撑
 
@@ -26,7 +26,7 @@ OnCallAgent 是一个面向运维场景的智能代理系统，深度融合三�
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                      OnCallAgent                            │
+│                         AutoOps                             │
 ├─────────────────────────────────────────────────────────────┤
 │  API Layer (Gin)                                            │
 │  ├── /upload    - 文件上传 & 知识库索引                      │
@@ -65,7 +65,7 @@ OnCallAgent 是一个面向运维场景的智能代理系统，深度融合三�
 
 ```bash
 git clone <repository-url>
-cd OnCallAgent
+cd AutoOps
 ```
 
 2. **启动依赖服务**
@@ -123,7 +123,7 @@ docker-compose -f docker-compose.prometheus.yml up -d
   "qdrant": {
     "host": "127.0.0.1",
     "port": 6334,
-    "collection": "oncallagent"
+    "collection": "autoops"
   },
   "openai": {
     "api_key": "your-api-key",
@@ -231,7 +231,7 @@ GET /plan
 ## 项目结构
 
 ```
-OnCallAgent/
+AutoOps/
 ├── backend/                    # Go 后端模块
 │   ├── cmd/
 │   └── main.go                 # 程序入口

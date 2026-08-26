@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	CollectionName = "oncallagent"
+	CollectionName = "autoops"
 )
 
 type QdranIndexerServer interface {

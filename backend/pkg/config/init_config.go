@@ -104,7 +104,7 @@ func setDefaults(v *viper.Viper) {
 	// Qdrant 默认值
 	v.SetDefault("qdrant.host", "localhost")
 	v.SetDefault("qdrant.port", 6334)
-	v.SetDefault("qdrant.collection", "oncallagent")
+	v.SetDefault("qdrant.collection", "autoops")
 
 	// OpenAI 默认值
 	v.SetDefault("openai.api_key", "")

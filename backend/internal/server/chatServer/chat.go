@@ -1,7 +1,7 @@
 package chatServer
 
 import (
-	"OnCallAgent/internal/server/ai/agent/chat"
+	"AutoOps/internal/server/ai/agent/chat"
 	"context"
 	"errors"
 	"fmt"

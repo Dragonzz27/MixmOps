@@ -1,7 +1,7 @@
 package chat
 
 import (
-	"OnCallAgent/pkg/config"
+	"AutoOps/pkg/config"
 
 	qdrant_retriever "github.com/cloudwego/eino-ext/components/retriever/qdrant"
 )

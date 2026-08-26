@@ -1,12 +1,12 @@
 package chat
 
 import (
-	indexerr "OnCallAgent/internal/repo/qrdant/indexer"
-	initQdrantRepo "OnCallAgent/internal/repo/qrdant/init"
-	"OnCallAgent/internal/repo/qrdant/retriever"
-	knowledgeindex "OnCallAgent/internal/server/ai/agent/knowledge_index"
-	"OnCallAgent/internal/server/ai/embeder"
-	"OnCallAgent/pkg/config"
+	indexerr "AutoOps/internal/repo/qrdant/indexer"
+	initQdrantRepo "AutoOps/internal/repo/qrdant/init"
+	"AutoOps/internal/repo/qrdant/retriever"
+	knowledgeindex "AutoOps/internal/server/ai/agent/knowledge_index"
+	"AutoOps/internal/server/ai/embeder"
+	"AutoOps/pkg/config"
 	"context"
 	"fmt"
 	"testing"
@@ -30,7 +30,7 @@ func TestGraphConstruction(t *testing.T) {
 		t.Fatalf("Failed to init embedder: %v", err)
 	}
 	retriever := retriever.NewRetrieverServer(ctx, indexer, *embedder)
-	r, err := retriever.NewRetrieverServer(ctx, "oncallagent", 0.5, 2)
+	r, err := retriever.NewRetrieverServer(ctx, "autoops", 0.5, 2)
 	if err != nil {
 		t.Fatalf("Failed to init retriever: %v", err)
 	}
