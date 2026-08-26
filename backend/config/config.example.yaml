@@ -1,0 +1,29 @@
+# Complete reference configuration. Runtime loads base.yaml and profiles/<profile>.yaml.
+# Set openai.api_key in base.yaml locally (do not commit credentials).
+server:
+  host: localhost
+  port: 8819
+embedder:
+  host: 127.0.0.1
+  port: 11434
+  model: nomic-embed-text
+  dimension: 384
+qdrant:
+  host: 127.0.0.1
+  port: 6334
+  collection: autoops
+openai:
+  api_key: "CHANGE_ME"
+  model: minimax/minimax-m2.1
+  api_base: https://api.qnaigc.com/v1
+log:
+  level: info
+  file: log/AutoOps.log
+prometheus:
+  url: http://127.0.0.1:30900
+kubernetes:
+  enabled: true
+  kubeconfig: ""
+  context: ""
+  namespace: autoops-test
+  in_cluster: false

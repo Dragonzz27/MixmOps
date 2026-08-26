@@ -81,29 +81,23 @@ docker run -p 6333:6333 -p 6334:6334 qdrant/qdrant
 
 3. **配置文件**
 
-复制配置模板并修改：
+准备配置目录并修改：
 
 ```bash
-cp backend/config/config_template.json backend/config/config.json
+cp -r backend/config /tmp/autoops-config
 ```
 
-编辑 `backend/config/config.json`，填入你的 API Key 和服务地址。
+编辑 `/tmp/autoops-config/base.yaml`，填入 API Key 和服务地址；按需修改 `/tmp/autoops-config/profiles/minikube.yaml`。
 
 4. **运行服务**
 
 ```bash
 cd backend
 go mod tidy
-go run ./cmd
+AUTOOPS_CONFIG_DIR=./config AUTOOPS_PROFILE=minikube go run ./cmd
 ```
 
 服务将在 `http://localhost:8819` 启动。
-
-### 使用 Docker Compose 启动 Prometheus 测试环境
-
-```bash
-docker-compose -f docker-compose.prometheus.yml up -d
-```
 
 ### 推荐：使用 Minikube 模拟运维集群
 
@@ -119,46 +113,13 @@ helm install monitoring prometheus-community/kube-prometheus-stack -n monitoring
 helm upgrade --install autoops-test ./deploy/helm/autoops-test
 ```
 
-将 `backend/config/config_template.json` 复制为 `config.json`，配置 Minikube Prometheus 的 NodePort 地址，并配置本机 kubeconfig。AutoOps 通过 Kubernetes API 查询 Pod、Deployment、Events 和 Pod 日志，不执行写操作。
+配置目录使用 `base.yaml` + `profiles/minikube.yaml`，配置 Minikube Prometheus 的 NodePort 地址，并配置本机 kubeconfig。AutoOps 通过 Kubernetes API 查询 Pod、Deployment、Events 和 Pod 日志，不执行写操作。
 
 ## 配置说明
 
-### backend/config/config.json
+### backend/config/base.yaml 与 profiles/minikube.yaml
 
-```json
-{
-  "server": {
-    "host": "localhost",
-    "port": 8819
-  },
-  "embedder": {
-    "host": "127.0.0.1",
-    "port": 11434,
-    "model": "nomic-embed-text",
-    "dimension": 384
-  },
-  "qdrant": {
-    "host": "127.0.0.1",
-    "port": 6334,
-    "collection": "autoops"
-  },
-  "openai": {
-    "api_key": "your-api-key",
-    "model": "your-model-name",
-    "api_base": "https://api.openai.com/v1"
-  },
-  "prometheus": {
-    "url": "http://127.0.0.1:30900"
-  },
-  "kubernetes": {
-    "enabled": true,
-    "kubeconfig": "",
-    "context": "",
-    "namespace": "autoops-test",
-    "in_cluster": false
-  }
-}
-```
+基础配置和 Minikube 环境配置分开维护，完整示例见 `backend/config/config.example.yaml`。
 
 | 配置项 | 说明 |
 |--------|------|
@@ -263,8 +224,9 @@ AutoOps/
 │   ├── cmd/
 │   └── main.go                 # 程序入口
 │   ├── config/
-│   ├── config.json             # 配置文件
-│   └── config_template.json    # 配置模板
+│   ├── base.yaml               # 应用基础配置
+│   ├── config.example.yaml     # 完整配置示例
+│   └── profiles/minikube.yaml  # Minikube 环境配置
 │   ├── docs/                   # 知识库文档目录
 │   ├── internal/
 │   ├── handler/                # HTTP 处理器
@@ -298,9 +260,8 @@ AutoOps/
 │   ├── prometheusTestServer/   # Prometheus 测试服务器镜像
 │   ├── go.mod
 │   └── go.sum
-├── prometheus_config/          # Prometheus 配置
 ├── deploy/helm/autoops-test/   # Minikube 测试 Helm Chart
-└── docker-compose.prometheus.yml # 兼容的 Docker Prometheus 方案
+└── backend/config/             # 基础配置和环境 profile
 ```
 
 ## 核心组件

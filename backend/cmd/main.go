@@ -15,6 +15,7 @@ import (
 	"AutoOps/pkg/log"
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/gin-gonic/gin"
 )
@@ -22,12 +23,14 @@ import (
 func main() {
 	ctx := context.Background()
 	// 初始化日志记录器
-	log := log.InitLogger("info", "log/AutoOps.log")
 	//初始化配置
-	config, err := config.InitConfig("./config/config.json")
+	configDir := os.Getenv("AUTOOPS_CONFIG_DIR")
+	profile := os.Getenv("AUTOOPS_PROFILE")
+	config, err := config.InitConfig(configDir, profile)
 	if err != nil {
 		panic(err)
 	}
+	log := log.InitLogger(config.Log.Level, config.Log.File)
 	kubernetes, err := kuberepo.NewRepository(config.Kubernetes)
 	if err != nil {
 		log.Warnf("Kubernetes integration unavailable; continuing without cluster tools: %v", err)

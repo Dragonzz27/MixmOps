@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/viper"
@@ -16,6 +17,7 @@ type Config struct {
 	OpenAI     OpenAIConfig     `mapstructure:"openai"`
 	Prometheus PrometheusConfig `mapstructure:"prometheus"`
 	Kubernetes KubernetesConfig `mapstructure:"kubernetes"`
+	Log        LogConfig        `mapstructure:"log"`
 }
 
 // ServerConfig 服务器配置
@@ -60,25 +62,38 @@ type KubernetesConfig struct {
 	InCluster  bool   `mapstructure:"in_cluster"`
 }
 
-// InitConfig 从配置文件初始化配置
-// configFile: 配置文件路径，如 "config/config.json"
-func InitConfig(configFile string) (*Config, error) {
+type LogConfig struct {
+	Level string `mapstructure:"level"`
+	File  string `mapstructure:"file"`
+}
+
+// InitConfig loads the base YAML configuration and a named environment profile.
+func InitConfig(configDir string, profile string) (*Config, error) {
+	if configDir == "" {
+		configDir = "./config"
+	}
+	if profile == "" {
+		profile = "minikube"
+	}
 	v := viper.New()
-
-	// 设置配置文件
-	v.SetConfigFile(configFile)
-
-	// 设置配置文件类型
-	if strings.HasSuffix(configFile, ".json") {
-		v.SetConfigType("json")
-	} else if strings.HasSuffix(configFile, ".yaml") || strings.HasSuffix(configFile, ".yml") {
-		v.SetConfigType("yaml")
-	}
-
-	// 读取配置文件
+	v.SetConfigType("yaml")
+	v.SetConfigFile(filepath.Join(configDir, "base.yaml"))
 	if err := v.ReadInConfig(); err != nil {
-		return nil, fmt.Errorf("failed to read config file: %w", err)
+		return nil, fmt.Errorf("failed to read base config: %w", err)
 	}
+	profileFile := filepath.Join(configDir, "profiles", profile+".yaml")
+	profileViper := viper.New()
+	profileViper.SetConfigType("yaml")
+	profileViper.SetConfigFile(profileFile)
+	if err := profileViper.ReadInConfig(); err != nil {
+		return nil, fmt.Errorf("failed to read profile %q: %w", profile, err)
+	}
+	if err := v.MergeConfigMap(profileViper.AllSettings()); err != nil {
+		return nil, fmt.Errorf("failed to merge profile %q: %w", profile, err)
+	}
+	v.SetEnvPrefix("AUTOOPS")
+	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	v.AutomaticEnv()
 
 	// 设置默认值
 	setDefaults(v)
@@ -137,6 +152,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("kubernetes.context", "")
 	v.SetDefault("kubernetes.namespace", "autoops-test")
 	v.SetDefault("kubernetes.in_cluster", false)
+	v.SetDefault("log.level", "info")
+	v.SetDefault("log.file", "log/AutoOps.log")
 }
 
 // GetServerAddr 获取服务器完整地址

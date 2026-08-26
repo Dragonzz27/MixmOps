@@ -9,31 +9,19 @@ import (
 func TestInitConfig(t *testing.T) {
 	// 创建临时配置文件
 	tmpDir := t.TempDir()
-	configFile := filepath.Join(tmpDir, "config.json")
-
-	configContent := `{
-		"server": {
-			"host": "testhost",
-			"port": 9999
-		},
-		"embedder": {
-			"host": "embedder-host",
-			"port": 11434,
-			"model": "test-model",
-			"dimension": 768
-		},
-		"qdrant": {
-			"host": "qdrant-host",
-			"port": 6334,
-			"collection": "test-collection"
-		}
-	}`
-
-	if err := os.WriteFile(configFile, []byte(configContent), 0644); err != nil {
+	if err := os.Mkdir(filepath.Join(tmpDir, "profiles"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	base := "server:\n  host: testhost\n  port: 9999\nembedder:\n  host: embedder-host\n  port: 11434\n  model: test-model\n  dimension: 768\nqdrant:\n  host: qdrant-host\n  port: 6334\n  collection: test-collection\n"
+	profile := "prometheus:\n  url: http://prometheus:9090\nkubernetes:\n  namespace: test-ns\n"
+	if err := os.WriteFile(filepath.Join(tmpDir, "base.yaml"), []byte(base), 0644); err != nil {
 		t.Fatalf("Failed to create test config file: %v", err)
 	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "profiles", "test.yaml"), []byte(profile), 0644); err != nil {
+		t.Fatal(err)
+	}
 
-	cfg, err := InitConfig(configFile)
+	cfg, err := InitConfig(tmpDir, "test")
 	if err != nil {
 		t.Fatalf("InitConfig failed: %v", err)
 	}
@@ -64,10 +52,13 @@ func TestInitConfig(t *testing.T) {
 	if cfg.Qdrant.Collection != "test-collection" {
 		t.Errorf("Expected Qdrant.Collection=test-collection, got %s", cfg.Qdrant.Collection)
 	}
+	if cfg.Prometheus.URL != "http://prometheus:9090" || cfg.Kubernetes.Namespace != "test-ns" {
+		t.Fatalf("profile was not merged: %#v", cfg)
+	}
 }
 
 func TestInitConfigFromFileNotFound(t *testing.T) {
-	_, err := InitConfig("nonexistent.json")
+	_, err := InitConfig("nonexistent", "missing")
 	if err == nil {
 		t.Error("Expected error for nonexistent config file")
 	}
