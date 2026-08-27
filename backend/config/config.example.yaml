@@ -3,11 +3,16 @@
 server:
   host: localhost
   port: 8819
-embedder:
-  host: 127.0.0.1
-  port: 11434
-  model: nomic-embed-text
-  dimension: 384
+embedding:
+  provider: openai
+  model: text-embedding-3-small
+  dimension: 1536
+  base_url: https://api.openai.com/v1
+  api_key: "CHANGE_ME"
+  timeout: 30s
+  batch_size: 32
+  max_retries: 2
+  normalize: true
 qdrant:
   host: 127.0.0.1
   port: 6334

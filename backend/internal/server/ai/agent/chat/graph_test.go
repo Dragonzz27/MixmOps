@@ -25,11 +25,11 @@ func TestGraphConstruction(t *testing.T) {
 	if err != nil {
 		t.Skipf("integration Qdrant unavailable: %v", err)
 	}
-	embedder, err := embeder.NewEmbedder(ctx, config)
+	embedder, err := embeder.NewProvider(ctx, config.Embedding)
 	if err != nil {
 		t.Skipf("integration embedder unavailable: %v", err)
 	}
-	retriever := retriever.NewRetrieverServer(ctx, indexer, *embedder)
+	retriever := retriever.NewRetrieverServer(ctx, indexer, embedder)
 	r, err := retriever.NewRetrieverServer(ctx, "autoops", 0.5, 2)
 	if err != nil {
 		t.Skipf("integration retriever unavailable: %v", err)
@@ -40,12 +40,12 @@ func TestGraphConstruction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to build chat agent: %v", err)
 	}
-	indexerr := indexerr.NewQdranIndexerServer(ctx, indexer, *embedder)
+	indexerr := indexerr.NewQdranIndexerServer(ctx, indexer, embedder, config.Qdrant.Collection, uint64(config.Embedding.Dimension))
 	err = indexerr.NewQdrantIndexer(ctx)
 	if err != nil {
 		t.Skipf("integration Qdrant unavailable: %v", err)
 	}
-	knowledgeIndex := knowledgeindex.NewKnowledgeIndex(embeder.NewEmbeddingServer(embedder), indexerr)
+	knowledgeIndex := knowledgeindex.NewKnowledgeIndex(embeder.NewEmbeddingServer(embedder, config.Embedding.Dimension), indexerr)
 	runner1, err := knowledgeIndex.NewGraph(ctx)
 	if err != nil {
 		t.Fatalf("Failed to init graph: %v", err)

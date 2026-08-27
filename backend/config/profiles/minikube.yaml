@@ -1,4 +1,6 @@
 profile: minikube
+embedding:
+  provider: openai
 prometheus:
   url: http://127.0.0.1:30900
 kubernetes:

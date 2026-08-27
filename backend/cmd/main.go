@@ -42,13 +42,16 @@ func main() {
 		panic(err)
 	}
 	//初始化embedding
-	embedder, err := embeder.NewEmbedder(ctx, config)
+	embedder, err := embeder.NewProvider(ctx, config.Embedding)
 	if err != nil {
 		panic(err)
 	}
+	if err := embedder.Validate(ctx); err != nil {
+		panic(fmt.Errorf("embedding validation failed: %w", err))
+	}
 	//初始化retriever
-	retriever := retriever.NewRetrieverServer(ctx, indexer, *embedder)
-	run, err := retriever.NewRetrieverServer(ctx, "autoops", 0.5, 2)
+	retriever := retriever.NewRetrieverServer(ctx, indexer, embedder)
+	run, err := retriever.NewRetrieverServer(ctx, config.Qdrant.Collection, 0.5, 2)
 	if err != nil {
 		panic(err)
 	}
@@ -60,13 +63,13 @@ func main() {
 		panic(err)
 	}
 	//新建集合
-	indexerr := indexerr.NewQdranIndexerServer(ctx, indexer, *embedder)
+	indexerr := indexerr.NewQdranIndexerServer(ctx, indexer, embedder, config.Qdrant.Collection, uint64(config.Embedding.Dimension))
 	err = indexerr.NewQdrantIndexer(ctx)
 	if err != nil {
 		panic(err)
 	}
 	//初始化RAGagent
-	knowledgeIndex := knowledgeindex.NewKnowledgeIndex(embeder.NewEmbeddingServer(embedder), indexerr)
+	knowledgeIndex := knowledgeindex.NewKnowledgeIndex(embeder.NewEmbeddingServer(embedder, config.Embedding.Dimension), indexerr)
 	runnerRAG, err := knowledgeIndex.NewGraph(ctx)
 	if err != nil {
 		panic(err)

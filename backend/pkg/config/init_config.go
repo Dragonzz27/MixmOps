@@ -12,7 +12,7 @@ import (
 // Config 应用配置结构
 type Config struct {
 	Server     ServerConfig     `mapstructure:"server"`
-	Embedder   EmbedderConfig   `mapstructure:"embedder"`
+	Embedding  EmbeddingConfig  `mapstructure:"embedding"`
 	Qdrant     QdrantConfig     `mapstructure:"qdrant"`
 	OpenAI     OpenAIConfig     `mapstructure:"openai"`
 	Prometheus PrometheusConfig `mapstructure:"prometheus"`
@@ -27,11 +27,16 @@ type ServerConfig struct {
 }
 
 // EmbedderConfig 嵌入模型配置
-type EmbedderConfig struct {
-	Host      string `mapstructure:"host"`
-	Port      int    `mapstructure:"port"`
-	Model     string `mapstructure:"model"`
-	Dimension int    `mapstructure:"dimension"`
+type EmbeddingConfig struct {
+	Provider   string `mapstructure:"provider"`
+	Model      string `mapstructure:"model"`
+	Dimension  int    `mapstructure:"dimension"`
+	BaseURL    string `mapstructure:"base_url"`
+	APIKey     string `mapstructure:"api_key"`
+	Timeout    string `mapstructure:"timeout"`
+	BatchSize  int    `mapstructure:"batch_size"`
+	MaxRetries int    `mapstructure:"max_retries"`
+	Normalize  bool   `mapstructure:"normalize"`
 }
 
 // QdrantConfig Qdrant 向量数据库配置
@@ -117,6 +122,21 @@ func InitConfig(configDir string, profile string) (*Config, error) {
 	if value := os.Getenv("AUTOOPS_K8S_ENABLED"); value != "" {
 		cfg.Kubernetes.Enabled = strings.EqualFold(value, "true") || value == "1"
 	}
+	if value := os.Getenv("EMBEDDING_API_KEY"); value != "" {
+		cfg.Embedding.APIKey = value
+	}
+	if value := os.Getenv("OPENAI_API_KEY"); value != "" && cfg.Embedding.APIKey == "" {
+		cfg.Embedding.APIKey = value
+	}
+	if value := os.Getenv("EMBEDDING_PROVIDER"); value != "" {
+		cfg.Embedding.Provider = value
+	}
+	if value := os.Getenv("EMBEDDING_MODEL"); value != "" {
+		cfg.Embedding.Model = value
+	}
+	if value := os.Getenv("EMBEDDING_BASE_URL"); value != "" {
+		cfg.Embedding.BaseURL = value
+	}
 
 	return &cfg, nil
 }
@@ -128,10 +148,14 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("server.port", 8819)
 
 	// Embedder 默认值
-	v.SetDefault("embedder.host", "localhost")
-	v.SetDefault("embedder.port", 11434)
-	v.SetDefault("embedder.model", "nomic-embed-text")
-	v.SetDefault("embedder.dimension", 384)
+	v.SetDefault("embedding.provider", "openai")
+	v.SetDefault("embedding.model", "text-embedding-3-small")
+	v.SetDefault("embedding.dimension", 1536)
+	v.SetDefault("embedding.base_url", "https://api.openai.com/v1")
+	v.SetDefault("embedding.timeout", "30s")
+	v.SetDefault("embedding.batch_size", 32)
+	v.SetDefault("embedding.max_retries", 2)
+	v.SetDefault("embedding.normalize", true)
 
 	// Qdrant 默认值
 	v.SetDefault("qdrant.host", "localhost")
@@ -162,9 +186,6 @@ func (c *Config) GetServerAddr() string {
 }
 
 // GetEmbedderAddr 获取嵌入模型服务地址
-func (c *Config) GetEmbedderAddr() string {
-	return fmt.Sprintf("http://%s:%d", c.Embedder.Host, c.Embedder.Port)
-}
 
 // GetQdrantAddr 获取 Qdrant 服务地址
 func (c *Config) GetQdrantAddr() string {

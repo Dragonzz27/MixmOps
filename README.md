@@ -45,7 +45,7 @@ AutoOps 是一个面向运维场景的智能代理系统，深度融合三种 AI
 ├─────────────────────────────────────────────────────────────┤
 │  Storage                                                    │
 │  ├── Qdrant      - 向量数据库                                │
-│  └── Ollama      - Embedding 模型服务                        │
+│  └── Embedding API - OpenAI-compatible（Ollama 可选）        │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -54,7 +54,7 @@ AutoOps 是一个面向运维场景的智能代理系统，深度融合三种 AI
 ### 前置依赖
 
 - Go 1.25+
-- [Ollama](https://ollama.ai/) (用于 Embedding)
+- OpenAI-compatible Embedding API（默认）或 [Ollama](https://ollama.ai/)（可选）
 - [Qdrant](https://qdrant.tech/) (向量数据库)
 - OpenAI 兼容 API (LLM 服务)
 - Prometheus (可选，用于告警分析)
@@ -72,7 +72,7 @@ cd AutoOps
 2. **启动依赖服务**
 
 ```bash
-# 启动 Ollama 并下载 Embedding 模型
+# Embedding 默认调用外部 OpenAI-compatible API；如需本地模式可启动 Ollama
 ollama pull nomic-embed-text
 
 # 启动 Qdrant
@@ -111,7 +111,7 @@ npm run dev
 
 ### 推荐：使用 Minikube 模拟运维集群
 
-AutoOps 在宿主机运行，Minikube 只承载测试业务服务和监控组件。Qdrant、Ollama 等中间件继续单独使用 Docker 启动。
+AutoOps 在宿主机运行，Minikube 只承载测试业务服务和监控组件。Qdrant、Embedding API/Ollama 等依赖独立运行。
 
 ```bash
 minikube start
@@ -134,7 +134,7 @@ helm upgrade --install autoops-test ./deploy/helm/autoops-test
 | 配置项 | 说明 |
 |--------|------|
 | `server.host/port` | HTTP 服务地址 |
-| `embedder.*` | Ollama Embedding 服务配置 |
+| `embedding.*` | Embedding Provider、模型、API 地址、Key 和维度配置 |
 | `qdrant.*` | Qdrant 向量数据库配置 |
 | `openai.*` | LLM API 配置 (兼容 OpenAI 格式) |
 | `prometheus.url` | Prometheus 服务地址 |
@@ -346,7 +346,7 @@ func NewMyTool() (tool.InvokableTool, error) {
 
 - **框架**: [Gin](https://gin-gonic.com/) + [CloudWeGo Eino](https://github.com/cloudwego/eino)
 - **向量数据库**: [Qdrant](https://qdrant.tech/)
-- **Embedding**: [Ollama](https://ollama.ai/) (nomic-embed-text)
+- **Embedding**: OpenAI-compatible `/v1/embeddings`（Ollama 可选）
 - **LLM**: OpenAI 兼容 API
 - **监控**: [Prometheus](https://prometheus.io/)
 

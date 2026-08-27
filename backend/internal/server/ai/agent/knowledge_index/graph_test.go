@@ -17,6 +17,8 @@ type mockEmbeddingServer struct {
 	normalizeFn func(embeddings []float64) []float64
 }
 
+func (m *mockEmbeddingServer) Dimension() int { return 3 }
+
 func (m *mockEmbeddingServer) Embedding(ctx context.Context, text []string) ([][]float64, error) {
 	if m.embeddingFn != nil {
 		return m.embeddingFn(ctx, text)
@@ -61,7 +63,7 @@ type mockQdrantServer struct {
 	capturedPts *qdrant.UpsertPoints
 }
 
-func (m *mockQdrantServer) NewQdrantIndexer(ctx context.Context) error { return nil }
+func (m *mockQdrantServer) NewQdrantIndexer(ctx context.Context) error                { return nil }
 func (m *mockQdrantServer) DeleteDocument(ctx context.Context, document string) error { return nil }
 
 func (m *mockQdrantServer) AddVector(ctx context.Context, points *qdrant.UpsertPoints) error {
