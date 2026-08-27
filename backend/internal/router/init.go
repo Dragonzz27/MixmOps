@@ -4,7 +4,10 @@ import (
 	"AutoOps/internal/handler"
 	kuberepo "AutoOps/internal/repo/kubernetes"
 	indexer "AutoOps/internal/repo/qrdant/indexer"
+	"AutoOps/internal/repo/sqlite"
 	"AutoOps/internal/server/ai/agent/chat"
+	"AutoOps/internal/server/background"
+	"AutoOps/internal/server/cases"
 	"AutoOps/internal/server/chatServer"
 	knowledgeindex "AutoOps/internal/server/knowledge_index"
 	maintenancedocument "AutoOps/internal/server/maintenance_document"
@@ -22,7 +25,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func InitRouter(ctx context.Context, r *gin.Engine, loger *logrus.Logger, config *config.Config, runner compose.Runnable[document.Source, bool], runnerChat compose.Runnable[*chat.UserMessage, *schema.Message], model *openai.ChatModel, retriever *qdrant_retriever.Retriever, kube kuberepo.KubernetesRepository, docIndexer indexer.QdranIndexerServer) {
+func InitRouter(ctx context.Context, r *gin.Engine, loger *logrus.Logger, config *config.Config, runner compose.Runnable[document.Source, bool], runnerChat compose.Runnable[*chat.UserMessage, *schema.Message], model *openai.ChatModel, retriever *qdrant_retriever.Retriever, kube kuberepo.KubernetesRepository, docIndexer indexer.QdranIndexerServer, database *sqlite.DB) {
 	//cors
 	corsConfig := cors.DefaultConfig()
 	corsConfig.AllowOrigins = []string{"*"}
@@ -63,4 +66,17 @@ func InitRouter(ctx context.Context, r *gin.Engine, loger *logrus.Logger, config
 	r.GET("/maintenance-documents/:name", maintenanceHandler.Get())
 	r.POST("/maintenance-documents", maintenanceHandler.Upload())
 	r.DELETE("/maintenance-documents/:name", maintenanceHandler.Delete())
+	bg := background.NewService(database.DB, kube)
+	cs := cases.NewService(database.DB)
+	modes := handler.NewModeHandler(bg, cs, kube)
+	r.POST("/webhooks/alertmanager", modes.AlertmanagerWebhook())
+	r.GET("/background/tasks", modes.Tasks())
+	r.GET("/background/tasks/:id", modes.Task())
+	r.POST("/background/tasks/:id/approve", modes.Approve())
+	r.POST("/background/tasks/:id/reject", modes.Reject())
+	r.GET("/incidents", modes.Incidents())
+	r.GET("/incidents/:id", modes.Incident())
+	r.POST("/incidents", modes.CreateIncident())
+	r.GET("/work-orders", modes.WorkOrders())
+	r.POST("/work-orders", modes.CreateWorkOrder())
 }

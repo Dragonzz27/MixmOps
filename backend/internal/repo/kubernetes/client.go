@@ -21,6 +21,10 @@ type KubernetesRepository interface {
 	GetPodLogs(context.Context, string, string, string, LogOptions) (string, error)
 }
 
+type PodActions interface {
+	DeletePod(context.Context, string, string) error
+}
+
 type repository struct{ client kubernetes.Interface }
 
 func NewRepository(cfg config.KubernetesConfig) (KubernetesRepository, error) {

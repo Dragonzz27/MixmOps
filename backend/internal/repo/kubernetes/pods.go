@@ -2,6 +2,7 @@ package kubernetes
 
 import (
 	"context"
+	"fmt"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -36,4 +37,22 @@ func (r *repository) ListPods(ctx context.Context, namespace string) ([]PodInfo,
 		result = append(result, PodInfo{Namespace: pod.Namespace, Name: pod.Name, Status: string(pod.Status.Phase), Ready: ready, Restarts: restarts, Reason: pod.Status.Reason, Message: pod.Status.Message})
 	}
 	return result, nil
+}
+
+func (r *repository) DeletePod(ctx context.Context, namespace, name string) error {
+	pod, err := r.client.CoreV1().Pods(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+	managed := false
+	for _, owner := range pod.OwnerReferences {
+		if owner.Kind == "ReplicaSet" && owner.Controller != nil && *owner.Controller {
+			managed = true
+			break
+		}
+	}
+	if !managed {
+		return fmt.Errorf("pod %s is not controlled by a ReplicaSet", name)
+	}
+	return r.client.CoreV1().Pods(namespace).Delete(ctx, name, metav1.DeleteOptions{})
 }

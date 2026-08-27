@@ -1,0 +1,113 @@
+package cases
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"time"
+
+	"github.com/google/uuid"
+)
+
+type Incident struct {
+	ID          string          `json:"id"`
+	Fingerprint string          `json:"alert_fingerprint"`
+	AlertName   string          `json:"alert_name"`
+	Status      string          `json:"status"`
+	Context     json.RawMessage `json:"context"`
+	CreatedAt   time.Time       `json:"created_at"`
+	UpdatedAt   time.Time       `json:"updated_at"`
+}
+type WorkOrder struct {
+	ID          string          `json:"id"`
+	Type        string          `json:"type"`
+	Title       string          `json:"title"`
+	Namespace   string          `json:"namespace"`
+	Target      string          `json:"target"`
+	Parameters  json.RawMessage `json:"parameters"`
+	Description string          `json:"description"`
+	Status      string          `json:"status"`
+	CreatedAt   time.Time       `json:"created_at"`
+	UpdatedAt   time.Time       `json:"updated_at"`
+}
+type Service struct{ db *sql.DB }
+
+func NewService(db *sql.DB) *Service { return &Service{db: db} }
+func (s *Service) CreateIncident(ctx context.Context, fp, name string, snapshot any) (Incident, error) {
+	id := uuid.New().String()
+	now := time.Now().UTC()
+	b, _ := json.Marshal(snapshot)
+	_, err := s.db.ExecContext(ctx, `INSERT INTO incidents(id,alert_fingerprint,alert_name,status,context_snapshot,created_at,updated_at) VALUES(?,?,?,?,?,?,?)`, id, fp, name, "open", string(b), now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+	return Incident{ID: id, Fingerprint: fp, AlertName: name, Status: "open", Context: b, CreatedAt: now, UpdatedAt: now}, err
+}
+func (s *Service) ListIncidents(ctx context.Context) ([]Incident, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id,alert_fingerprint,alert_name,status,context_snapshot,created_at,updated_at FROM incidents ORDER BY created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Incident{}
+	for rows.Next() {
+		var i Incident
+		var raw, c, u string
+		if err := rows.Scan(&i.ID, &i.Fingerprint, &i.AlertName, &i.Status, &raw, &c, &u); err != nil {
+			return nil, err
+		}
+		i.Context = json.RawMessage(raw)
+		i.CreatedAt, _ = time.Parse(time.RFC3339Nano, c)
+		i.UpdatedAt, _ = time.Parse(time.RFC3339Nano, u)
+		out = append(out, i)
+	}
+	return out, rows.Err()
+}
+func (s *Service) GetIncident(ctx context.Context, id string) (Incident, error) {
+	var i Incident
+	var raw, c, u string
+	err := s.db.QueryRowContext(ctx, `SELECT id,alert_fingerprint,alert_name,status,context_snapshot,created_at,updated_at FROM incidents WHERE id=?`, id).Scan(&i.ID, &i.Fingerprint, &i.AlertName, &i.Status, &raw, &c, &u)
+	i.Context = json.RawMessage(raw)
+	i.CreatedAt, _ = time.Parse(time.RFC3339Nano, c)
+	i.UpdatedAt, _ = time.Parse(time.RFC3339Nano, u)
+	return i, err
+}
+
+var validOrderTypes = map[string]bool{"package-generation": true, "config-generation": true, "deployment-plan": true, "cluster-check": true, "operation-script": true}
+
+func (s *Service) CreateWorkOrder(ctx context.Context, w WorkOrder) (WorkOrder, error) {
+	if !validOrderTypes[w.Type] || w.Title == "" {
+		return w, fmt.Errorf("invalid work order")
+	}
+	w.ID = uuid.New().String()
+	w.Status = "created"
+	w.CreatedAt = time.Now().UTC()
+	w.UpdatedAt = w.CreatedAt
+	if len(w.Parameters) == 0 {
+		w.Parameters = json.RawMessage(`{}`)
+	}
+	_, err := s.db.ExecContext(ctx, `INSERT INTO work_orders(id,type,title,namespace,target,parameters,status,description,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, w.ID, w.Type, w.Title, w.Namespace, w.Target, string(w.Parameters), w.Status, w.Description, w.CreatedAt.Format(time.RFC3339Nano), w.UpdatedAt.Format(time.RFC3339Nano))
+	return w, err
+}
+func (s *Service) ListWorkOrders(ctx context.Context) ([]WorkOrder, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id,type,title,namespace,target,parameters,status,description,created_at,updated_at FROM work_orders ORDER BY created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []WorkOrder{}
+	for rows.Next() {
+		var w WorkOrder
+		var raw, c, u string
+		if err := rows.Scan(&w.ID, &w.Type, &w.Title, &w.Namespace, &w.Target, &raw, &w.Status, &w.Description, &c, &u); err != nil {
+			return nil, err
+		}
+		w.Parameters = json.RawMessage(raw)
+		w.CreatedAt, _ = time.Parse(time.RFC3339Nano, c)
+		w.UpdatedAt, _ = time.Parse(time.RFC3339Nano, u)
+		out = append(out, w)
+	}
+	return out, rows.Err()
+}
+func (s *Service) AddMessage(ctx context.Context, owner, id, role, content string) error {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO agent_messages(id,owner_type,owner_id,role,content,created_at) VALUES(?,?,?,?,?,?)`, uuid.New().String(), owner, id, role, content, time.Now().UTC().Format(time.RFC3339Nano))
+	return err
+}

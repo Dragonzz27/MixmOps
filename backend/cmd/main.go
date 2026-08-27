@@ -5,6 +5,7 @@ import (
 	indexerr "AutoOps/internal/repo/qrdant/indexer"
 	initQdrantRepo "AutoOps/internal/repo/qrdant/init"
 	"AutoOps/internal/repo/qrdant/retriever"
+	"AutoOps/internal/repo/sqlite"
 	"AutoOps/internal/router"
 	"AutoOps/internal/server/ai/agent/chat"
 	knowledgeindex "AutoOps/internal/server/ai/agent/knowledge_index"
@@ -30,6 +31,11 @@ func main() {
 		panic(err)
 	}
 	log := log.InitLogger(config.Log.Level, config.Log.File)
+	database, err := sqlite.Open("data/autoops.db")
+	if err != nil {
+		panic(err)
+	}
+	defer database.Close()
 	kubernetes, err := kuberepo.NewRepository(config.Kubernetes)
 	if err != nil {
 		log.Warnf("Kubernetes integration unavailable; continuing without cluster tools: %v", err)
@@ -80,7 +86,7 @@ func main() {
 	}
 	// 初始化gin
 	r := gin.Default()
-	router.InitRouter(ctx, r, log, config, runnerRAG, runner, chatModel, run, kubernetes, indexerr)
+	router.InitRouter(ctx, r, log, config, runnerRAG, runner, chatModel, run, kubernetes, indexerr, database)
 	// 启动 HTTP 服务
 	addr := fmt.Sprintf("%s:%d", config.Server.Host, config.Server.Port)
 	if err = r.Run(addr); err != nil {
