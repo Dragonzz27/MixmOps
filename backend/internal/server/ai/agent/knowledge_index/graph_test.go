@@ -62,6 +62,7 @@ type mockQdrantServer struct {
 }
 
 func (m *mockQdrantServer) NewQdrantIndexer(ctx context.Context) error { return nil }
+func (m *mockQdrantServer) DeleteDocument(ctx context.Context, document string) error { return nil }
 
 func (m *mockQdrantServer) AddVector(ctx context.Context, points *qdrant.UpsertPoints) error {
 	m.capturedPts = points

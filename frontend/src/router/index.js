@@ -1,0 +1,3 @@
+import { createRouter, createWebHistory } from 'vue-router'
+const routes=[{path:'/app',component:()=>import('@/layouts/Layout.vue'),children:[{path:'',name:'Dashboard',component:()=>import('@/views/Dashboard.vue')},{path:'chat',name:'Chat',component:()=>import('@/views/Chat.vue')},{path:'alerts',name:'Alerts',component:()=>import('@/views/Alerts.vue')},{path:'cluster',name:'Cluster',component:()=>import('@/views/Cluster.vue')},{path:'knowledge',name:'Knowledge',component:()=>import('@/views/Knowledge.vue')}]} ,{path:'/:pathMatch(.*)*',redirect:'/app'}]
+export default createRouter({history:createWebHistory(),routes})

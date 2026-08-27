@@ -15,6 +15,25 @@ const (
 type QdranIndexerServer interface {
 	NewQdrantIndexer(ctx context.Context) error
 	AddVector(ctx context.Context, points *qdrant.UpsertPoints) error
+	DeleteDocument(ctx context.Context, document string) error
+}
+
+func (qs qdrantIndexerServer) DeleteDocument(ctx context.Context, document string) error {
+	points, err := qs.client.Scroll(ctx, &qdrant.ScrollPoints{CollectionName: CollectionName, Filter: &qdrant.Filter{Must: []*qdrant.Condition{qdrant.NewMatchText("content", document)}}})
+	if err != nil {
+		return err
+	}
+	ids := make([]*qdrant.PointId, 0, len(points))
+	for _, point := range points {
+		if point != nil && point.Id != nil {
+			ids = append(ids, point.Id)
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	_, err = qs.client.Delete(ctx, &qdrant.DeletePoints{CollectionName: CollectionName, Points: qdrant.NewPointsSelectorIDs(ids)})
+	return err
 }
 
 type qdrantIndexerServer struct {

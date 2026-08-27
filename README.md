@@ -99,6 +99,16 @@ AUTOOPS_CONFIG_DIR=./config AUTOOPS_PROFILE=minikube go run ./cmd
 
 服务将在 `http://localhost:8819` 启动。
 
+### 启动 AutoOps 前端
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+前端默认运行在 `http://localhost:5173`，Vite 会将 `/api` 请求代理到后端 `http://localhost:8819`。工作台包含告警中心、Minikube 集群观测、Agent 流式对话和知识库管理页面。
+
 ### 推荐：使用 Minikube 模拟运维集群
 
 AutoOps 在宿主机运行，Minikube 只承载测试业务服务和监控组件。Qdrant、Ollama 等中间件继续单独使用 Docker 启动。

@@ -47,6 +47,30 @@ type SimplifiedAlert struct {
 	State       string `json:"state" jsonschema:"description=告警状态，通常为 'firing'（触发中）或 'pending'（待触发）"`
 	ActiveAt    string `json:"active_at" jsonschema:"description=告警激活时间，RFC3339 格式的时间戳，例如 '2025-10-29T08:48:42.496134755Z'"`
 	Duration    string `json:"duration" jsonschema:"description=告警持续时间，从激活时间到当前时间的时长，格式如 '2h30m15s'、'30m15s' 或 '15s'"`
+	Severity    string `json:"severity"`
+}
+
+// QueryPrometheusAlerts exposes the normalized alert response to HTTP handlers.
+func QueryPrometheusAlerts(url string) (PrometheusAlertsOutput, error) {
+	result, err := queryPrometheusAlerts(url)
+	if err != nil {
+		return PrometheusAlertsOutput{Success: false, Error: err.Error()}, err
+	}
+	seen := map[string]bool{}
+	alerts := make([]SimplifiedAlert, 0)
+	for _, alert := range result.Data.Alerts {
+		name := alert.Labels["alertname"]
+		if seen[name] {
+			continue
+		}
+		seen[name] = true
+		severity := alert.Labels["severity"]
+		if severity == "" {
+			severity = "unknown"
+		}
+		alerts = append(alerts, SimplifiedAlert{AlertName: name, Description: alert.Annotations["description"], State: alert.State, ActiveAt: alert.ActiveAt, Duration: calculateActiveTime(alert.ActiveAt), Severity: severity})
+	}
+	return PrometheusAlertsOutput{Success: true, Alerts: alerts, Message: fmt.Sprintf("Successfully retrieved %d active alerts", len(alerts))}, nil
 }
 
 // queryPrometheusAlerts 查询 Prometheus 告警
@@ -106,40 +130,11 @@ func NewPrometheusAlertsTool(url string) (tool.InvokableTool, error) {
 	return utils.InferTool("query_prometheus_alerts",
 		"Query active alerts from Prometheus alerting system. This tool retrieves all currently active/firing alerts including their labels, annotations, state, and values. Use this tool when you need to check what alerts are currently firing, investigate alert conditions, or monitor alert status.",
 		func(ctx context.Context, input PrometheusInput) (output string, err error) {
-			result, err := queryPrometheusAlerts(url)
+			result, err := QueryPrometheusAlerts(url)
 			if err != nil {
 				return "", err
 			}
-			// 转换为简化格式，对于相同的 alertname，只保留第一个
-			seenAlertNames := make(map[string]bool)
-			simplifiedAlerts := make([]SimplifiedAlert, 0)
-			for _, alert := range result.Data.Alerts {
-				alertName := alert.Labels["alertname"]
-
-				// 如果这个 alertname 已经存在，跳过
-				if seenAlertNames[alertName] {
-					continue
-				}
-
-				// 标记为已见过
-				seenAlertNames[alertName] = true
-
-				simplified := SimplifiedAlert{
-					AlertName:   alertName,
-					Description: alert.Annotations["description"],
-					State:       alert.State,
-					ActiveAt:    alert.ActiveAt,
-					Duration:    calculateActiveTime(alert.ActiveAt),
-				}
-				simplifiedAlerts = append(simplifiedAlerts, simplified)
-			}
-
-			// 构建成功响应
-			alertsOut := PrometheusAlertsOutput{
-				Success: true,
-				Alerts:  simplifiedAlerts,
-				Message: fmt.Sprintf("Successfully retrieved %d active alerts", len(simplifiedAlerts)),
-			}
+			alertsOut := result
 
 			// 转换为JSON
 			jsonBytes, err := json.Marshal(alertsOut)

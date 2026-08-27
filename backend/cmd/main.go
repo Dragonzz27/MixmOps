@@ -78,7 +78,7 @@ func main() {
 	}
 	// 初始化gin
 	r := gin.Default()
-	router.InitRouter(ctx, r, log, config, runnerRAG, runner, chatModel, run, kubernetes)
+	router.InitRouter(ctx, r, log, config, runnerRAG, runner, chatModel, run, kubernetes, indexerr)
 	// 启动 HTTP 服务
 	addr := fmt.Sprintf("%s:%d", config.Server.Host, config.Server.Port)
 	if err = r.Run(addr); err != nil {

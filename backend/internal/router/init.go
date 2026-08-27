@@ -3,6 +3,7 @@ package router
 import (
 	"AutoOps/internal/handler"
 	kuberepo "AutoOps/internal/repo/kubernetes"
+	indexer "AutoOps/internal/repo/qrdant/indexer"
 	"AutoOps/internal/server/ai/agent/chat"
 	"AutoOps/internal/server/chatServer"
 	knowledgeindex "AutoOps/internal/server/knowledge_index"
@@ -20,7 +21,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func InitRouter(ctx context.Context, r *gin.Engine, loger *logrus.Logger, config *config.Config, runner compose.Runnable[document.Source, bool], runnerChat compose.Runnable[*chat.UserMessage, *schema.Message], model *openai.ChatModel, retriever *qdrant_retriever.Retriever, repositories ...kuberepo.KubernetesRepository) {
+func InitRouter(ctx context.Context, r *gin.Engine, loger *logrus.Logger, config *config.Config, runner compose.Runnable[document.Source, bool], runnerChat compose.Runnable[*chat.UserMessage, *schema.Message], model *openai.ChatModel, retriever *qdrant_retriever.Retriever, kube kuberepo.KubernetesRepository, docIndexer indexer.QdranIndexerServer) {
 	//cors
 	corsConfig := cors.DefaultConfig()
 	corsConfig.AllowOrigins = []string{"*"}
@@ -42,7 +43,17 @@ func InitRouter(ctx context.Context, r *gin.Engine, loger *logrus.Logger, config
 	r.POST("/chat", chaterHandler.Chat())
 	r.POST("/chatStream", chaterHandler.ChatSream())
 	//运维
-	planer := plan.NewPlanServer(*config, model, loger, retriever, repositories...)
+	planer := plan.NewPlanServer(*config, model, loger, retriever, kube)
 	planerH := handler.NewPlanHandler(planer)
 	r.GET("/plan", planerH.Plan())
+	observability := handler.NewObservabilityHandler(config, kube)
+	r.GET("/alerts", observability.Alerts())
+	r.GET("/cluster/summary", observability.Summary())
+	r.GET("/cluster/pods", observability.Pods())
+	r.GET("/cluster/deployments", observability.Deployments())
+	r.GET("/cluster/events", observability.Events())
+	r.GET("/cluster/pods/:pod/logs", observability.Logs())
+	documents := handler.NewDocumentHandler("./docs", docIndexer)
+	r.GET("/knowledge/documents", documents.List())
+	r.DELETE("/knowledge/documents/:name", documents.Delete())
 }
