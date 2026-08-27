@@ -54,6 +54,6 @@ func retrieve(ctx context.Context, query RetrieveRequest) (docs []*schema.Docume
 
 func RetrieveTool() (tool.InvokableTool, error) {
 	return utils.InferTool("query_internal_docs",
-		"Use this tool to search internal documentation and knowledge base for relevant information. It performs RAG (Retrieval-Augmented Generation) to find similar documents and extract processing steps. This is useful when you need to understand internal procedures, best practices, or step-by-step guides stored in the company's documentation.",
+		"查询内部维护文档，包括集群架构、运维手册、故障预案和变更规范。使用检索结果中的文档类型、描述和标签来选择最合适的内部依据。",
 		retrieve)
 }

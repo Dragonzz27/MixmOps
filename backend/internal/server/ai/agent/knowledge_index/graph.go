@@ -1,6 +1,7 @@
 package knowledgeindex
 
 import (
+	maintenancedocument "AutoOps/internal/server/maintenance_document"
 	"AutoOps/pkg/tool"
 	"context"
 	"fmt"
@@ -59,7 +60,13 @@ func (k *knowledgeIndex) textToQdrantIndex() func(ctx context.Context, req []*sc
 	return func(ctx context.Context, req []*schema.Document) (bool, error) {
 		points := make([]*qdrant.PointStruct, 0, len(req))
 		for _, doc := range req {
-			lines := strings.Split(doc.Content, "\n")
+			metadata := maintenancedocument.Metadata{Title: "", Type: maintenancedocument.TypeOperationsManual}
+			content := doc.Content
+			if parsed, body, parseErr := maintenancedocument.Parse(doc.Content); parseErr == nil {
+				metadata = parsed
+				content = body
+			}
+			lines := strings.Split(content, "\n")
 			if len(lines) == 0 {
 				continue
 			}
@@ -86,7 +93,11 @@ func (k *knowledgeIndex) textToQdrantIndex() func(ctx context.Context, req []*sc
 			res = k.embederServer.Normalize(res)
 
 			payload := qdrant.NewValueMap(map[string]any{
-				"content": title + "\n" + strings.Join(body, "\n"),
+				"content":       title + "\n" + strings.Join(body, "\n"),
+				"title":         metadata.Title,
+				"document_type": metadata.Type,
+				"description":   metadata.Description,
+				"tags":          strings.Join(metadata.Tags, ","),
 			})
 			points = append(points, &qdrant.PointStruct{
 				Id: &qdrant.PointId{

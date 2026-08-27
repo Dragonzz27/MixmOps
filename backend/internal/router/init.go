@@ -7,6 +7,7 @@ import (
 	"AutoOps/internal/server/ai/agent/chat"
 	"AutoOps/internal/server/chatServer"
 	knowledgeindex "AutoOps/internal/server/knowledge_index"
+	maintenancedocument "AutoOps/internal/server/maintenance_document"
 	"AutoOps/internal/server/plan"
 	"AutoOps/pkg/config"
 	"context"
@@ -56,4 +57,10 @@ func InitRouter(ctx context.Context, r *gin.Engine, loger *logrus.Logger, config
 	documents := handler.NewDocumentHandler("./docs", docIndexer)
 	r.GET("/knowledge/documents", documents.List())
 	r.DELETE("/knowledge/documents/:name", documents.Delete())
+	maintenance := maintenancedocument.NewService("./docs", runner, docIndexer, loger)
+	maintenanceHandler := handler.NewMaintenanceDocumentHandler(maintenance)
+	r.GET("/maintenance-documents", maintenanceHandler.List())
+	r.GET("/maintenance-documents/:name", maintenanceHandler.Get())
+	r.POST("/maintenance-documents", maintenanceHandler.Upload())
+	r.DELETE("/maintenance-documents/:name", maintenanceHandler.Delete())
 }
