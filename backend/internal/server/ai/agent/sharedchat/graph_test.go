@@ -1,4 +1,4 @@
-package chat
+package sharedchat
 
 import (
 	indexerr "AutoOps/internal/repo/qrdant/indexer"

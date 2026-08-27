@@ -5,18 +5,15 @@ import (
 	kuberepo "AutoOps/internal/repo/kubernetes"
 	indexer "AutoOps/internal/repo/qrdant/indexer"
 	"AutoOps/internal/repo/sqlite"
-	"AutoOps/internal/server/ai/agent/chat"
+	"AutoOps/internal/server/ai/agent/sharedchat"
 	"AutoOps/internal/server/background"
 	"AutoOps/internal/server/cases"
-	"AutoOps/internal/server/chatServer"
+	"AutoOps/internal/server/conversation"
 	knowledgeindex "AutoOps/internal/server/knowledge_index"
 	maintenancedocument "AutoOps/internal/server/maintenance_document"
-	"AutoOps/internal/server/plan"
 	"AutoOps/pkg/config"
 	"context"
 
-	"github.com/cloudwego/eino-ext/components/model/openai"
-	qdrant_retriever "github.com/cloudwego/eino-ext/components/retriever/qdrant"
 	"github.com/cloudwego/eino/components/document"
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
@@ -25,7 +22,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func InitRouter(ctx context.Context, r *gin.Engine, loger *logrus.Logger, config *config.Config, runner compose.Runnable[document.Source, bool], runnerChat compose.Runnable[*chat.UserMessage, *schema.Message], model *openai.ChatModel, retriever *qdrant_retriever.Retriever, kube kuberepo.KubernetesRepository, docIndexer indexer.QdranIndexerServer, database *sqlite.DB) {
+func InitRouter(ctx context.Context, r *gin.Engine, loger *logrus.Logger, config *config.Config, runner compose.Runnable[document.Source, bool], runnerChat compose.Runnable[*sharedchat.UserMessage, *schema.Message], kube kuberepo.KubernetesRepository, docIndexer indexer.QdranIndexerServer, database *sqlite.DB) {
 	//cors
 	corsConfig := cors.DefaultConfig()
 	corsConfig.AllowOrigins = []string{"*"}
@@ -41,17 +38,7 @@ func InitRouter(ctx context.Context, r *gin.Engine, loger *logrus.Logger, config
 	uploder := knowledgeindex.NewFileUploaderServer(loger, runner)
 	uploderHandler := handler.NewFileUploader("./docs/", uploder)
 	r.POST("/upload", uploderHandler.Upload())
-	//对话
-	chater := chatServer.NewChatServer(loger, runnerChat)
-	chaterHandler := handler.NewChatHandler(chater)
-	r.POST("/chat", chaterHandler.Chat())
-	r.POST("/chatStream", chaterHandler.ChatSream())
-	//运维
-	planer := plan.NewPlanServer(*config, model, loger, retriever, kube)
-	planerH := handler.NewPlanHandler(planer)
-	r.GET("/plan", planerH.Plan())
 	observability := handler.NewObservabilityHandler(config, kube)
-	r.GET("/alerts", observability.Alerts())
 	r.GET("/cluster/summary", observability.Summary())
 	r.GET("/cluster/pods", observability.Pods())
 	r.GET("/cluster/deployments", observability.Deployments())
@@ -77,6 +64,18 @@ func InitRouter(ctx context.Context, r *gin.Engine, loger *logrus.Logger, config
 	r.GET("/incidents", modes.Incidents())
 	r.GET("/incidents/:id", modes.Incident())
 	r.POST("/incidents", modes.CreateIncident())
+	r.GET("/incidents/:id/context", modes.Incident())
+	r.POST("/incidents/:id/resolve", modes.ResolveIncident())
 	r.GET("/work-orders", modes.WorkOrders())
 	r.POST("/work-orders", modes.CreateWorkOrder())
+	r.GET("/work-orders/:id", modes.WorkOrder())
+	r.POST("/work-orders/:id/complete", modes.CompleteWorkOrder())
+	r.POST("/work-orders/:id/cancel", modes.CancelWorkOrder())
+	conversationHandler := handler.NewConversationHandler(conversation.NewService(cs, runnerChat))
+	r.GET("/incidents/:id/messages", conversationHandler.History(conversation.OwnerIncident))
+	r.POST("/incidents/:id/chat", conversationHandler.Chat(conversation.OwnerIncident))
+	r.POST("/incidents/:id/chatStream", conversationHandler.Stream(conversation.OwnerIncident))
+	r.GET("/work-orders/:id/messages", conversationHandler.History(conversation.OwnerWorkOrder))
+	r.POST("/work-orders/:id/chat", conversationHandler.Chat(conversation.OwnerWorkOrder))
+	r.POST("/work-orders/:id/chatStream", conversationHandler.Stream(conversation.OwnerWorkOrder))
 }

@@ -121,6 +121,15 @@ func (h *ModeHandler) Incident() gin.HandlerFunc {
 		c.JSON(200, item)
 	}
 }
+func (h *ModeHandler) ResolveIncident() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if err := h.cases.ResolveIncident(c.Request.Context(), c.Param("id")); err != nil {
+			c.JSON(400, gin.H{"message": err.Error()})
+			return
+		}
+		c.JSON(200, gin.H{"message": "incident resolved"})
+	}
+}
 func (h *ModeHandler) CreateIncident() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var in struct {
@@ -147,6 +156,34 @@ func (h *ModeHandler) WorkOrders() gin.HandlerFunc {
 			return
 		}
 		c.JSON(200, gin.H{"work_orders": items})
+	}
+}
+func (h *ModeHandler) WorkOrder() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		item, err := h.cases.GetWorkOrder(c.Request.Context(), c.Param("id"))
+		if err != nil {
+			c.JSON(404, gin.H{"message": err.Error()})
+			return
+		}
+		c.JSON(200, item)
+	}
+}
+func (h *ModeHandler) CompleteWorkOrder() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if err := h.cases.SetWorkOrderStatus(c.Request.Context(), c.Param("id"), "completed"); err != nil {
+			c.JSON(400, gin.H{"message": err.Error()})
+			return
+		}
+		c.JSON(200, gin.H{"message": "work order completed"})
+	}
+}
+func (h *ModeHandler) CancelWorkOrder() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if err := h.cases.SetWorkOrderStatus(c.Request.Context(), c.Param("id"), "cancelled"); err != nil {
+			c.JSON(400, gin.H{"message": err.Error()})
+			return
+		}
+		c.JSON(200, gin.H{"message": "work order cancelled"})
 	}
 }
 func (h *ModeHandler) CreateWorkOrder() gin.HandlerFunc {

@@ -30,9 +30,7 @@ AutoOps 是一个面向运维场景的智能代理系统，深度融合三种 AI
 ├─────────────────────────────────────────────────────────────┤
 │  API Layer (Gin)                                            │
 │  ├── /upload    - 文件上传 & 知识库索引                      │
-│  ├── /chat      - 智能对话                                   │
-│  ├── /chatStream - 流式对话                                  │
-│  └── /plan      - 运维计划分析                               │
+│││  └── /incidents - 故障排查与 Agent 交互                       │
 ├─────────────────────────────────────────────────────────────┤
 │  Agent Layer (CloudWeGo Eino)                               │
 │  ├── ReAct Agent     - 对话代理 (工具调用)                   │
@@ -107,7 +105,7 @@ npm install
 npm run dev
 ```
 
-前端默认运行在 `http://localhost:5173`，Vite 会将 `/api` 请求代理到后端 `http://localhost:8819`。工作台包含告警中心、Minikube 集群观测、Agent 流式对话和知识库管理页面。
+前端默认运行在 `http://localhost:5173`，Vite 会将 `/api` 请求代理到后端 `http://localhost:8819`。工作台包含后台任务、故障排查、日常工单、Minikube 集群观测和维护文档页面。
 
 ### 推荐：使用 Minikube 模拟运维集群
 
@@ -174,7 +172,7 @@ file: <markdown-file>
 ### 对话
 
 ```http
-POST /chat
+POST /incidents/:id/chat
 Content-Type: application/json
 
 {
@@ -193,7 +191,7 @@ Content-Type: application/json
 ### 流式对话
 
 ```http
-POST /chatStream
+POST /incidents/:id/chatStream
 Content-Type: application/json
 
 {
@@ -213,7 +211,7 @@ data: [DONE]
 ### 运维计划分析
 
 ```http
-GET /plan
+POST /work-orders/:id/chatStream
 ```
 
 自动获取 Prometheus 活跃告警，检索内部知识库，生成分析报告。
@@ -259,7 +257,6 @@ AutoOps/
 │       │       ├── metrics_alerts.go  # Prometheus 工具
 │       │       ├── rag.go      # RAG 检索工具
 │       │       └── time.go     # 时间工具
-│       ├── chatServer/         # 对话服务
 │       ├── knowledge_index/    # 知识库索引服务
 │       └── plan/               # 运维计划服务
 │   ├── pkg/                    # 配置、日志和通用工具

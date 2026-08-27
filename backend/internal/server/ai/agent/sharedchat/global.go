@@ -1,4 +1,4 @@
-package chat
+package sharedchat
 
 import (
 	kuberepo "AutoOps/internal/repo/kubernetes"

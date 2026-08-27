@@ -166,7 +166,9 @@ type DocumentHandler struct {
 
 func NewDocumentHandler(root string, index interface {
 	DeleteDocument(context.Context, string) error
-}) *DocumentHandler { return &DocumentHandler{root: root, indexer: index} }
+}) *DocumentHandler {
+	return &DocumentHandler{root: root, indexer: index}
+}
 func (h *DocumentHandler) List() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		entries, err := os.ReadDir(h.root)

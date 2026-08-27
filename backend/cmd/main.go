@@ -7,11 +7,10 @@ import (
 	"AutoOps/internal/repo/qrdant/retriever"
 	"AutoOps/internal/repo/sqlite"
 	"AutoOps/internal/router"
-	"AutoOps/internal/server/ai/agent/chat"
 	knowledgeindex "AutoOps/internal/server/ai/agent/knowledge_index"
+	"AutoOps/internal/server/ai/agent/sharedchat"
 	"AutoOps/internal/server/ai/embeder"
 	aitools "AutoOps/internal/server/ai/tools"
-	"AutoOps/internal/server/model"
 	"AutoOps/pkg/config"
 	"AutoOps/pkg/log"
 	"context"
@@ -62,7 +61,7 @@ func main() {
 	}
 	aitools.InitRAGTool(run)
 	//初始化chatAgent
-	re := chat.NewChatServer(run, config, kubernetes)
+	re := sharedchat.NewChatServer(run, config, kubernetes)
 	runner, err := re.BuildChatAgent(ctx)
 	if err != nil {
 		panic(err)
@@ -79,14 +78,9 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	//初始化model
-	chatModel, err := model.NewOpenaiModel(ctx, config)
-	if err != nil {
-		panic(err)
-	}
 	// 初始化gin
 	r := gin.Default()
-	router.InitRouter(ctx, r, log, config, runnerRAG, runner, chatModel, run, kubernetes, indexerr, database)
+	router.InitRouter(ctx, r, log, config, runnerRAG, runner, kubernetes, indexerr, database)
 	// 启动 HTTP 服务
 	addr := fmt.Sprintf("%s:%d", config.Server.Host, config.Server.Port)
 	if err = r.Run(addr); err != nil {

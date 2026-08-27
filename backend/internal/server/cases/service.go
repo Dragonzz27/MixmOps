@@ -31,6 +31,14 @@ type WorkOrder struct {
 	CreatedAt   time.Time       `json:"created_at"`
 	UpdatedAt   time.Time       `json:"updated_at"`
 }
+type Message struct {
+	ID        string    `json:"id"`
+	OwnerType string    `json:"owner_type"`
+	OwnerID   string    `json:"owner_id"`
+	Role      string    `json:"role"`
+	Content   string    `json:"content"`
+	CreatedAt time.Time `json:"created_at"`
+}
 type Service struct{ db *sql.DB }
 
 func NewService(db *sql.DB) *Service { return &Service{db: db} }
@@ -107,7 +115,60 @@ func (s *Service) ListWorkOrders(ctx context.Context) ([]WorkOrder, error) {
 	}
 	return out, rows.Err()
 }
+func (s *Service) GetWorkOrder(ctx context.Context, id string) (WorkOrder, error) {
+	var w WorkOrder
+	var raw, c, u string
+	err := s.db.QueryRowContext(ctx, `SELECT id,type,title,namespace,target,parameters,status,description,created_at,updated_at FROM work_orders WHERE id=?`, id).Scan(&w.ID, &w.Type, &w.Title, &w.Namespace, &w.Target, &raw, &w.Status, &w.Description, &c, &u)
+	w.Parameters = json.RawMessage(raw)
+	w.CreatedAt, _ = time.Parse(time.RFC3339Nano, c)
+	w.UpdatedAt, _ = time.Parse(time.RFC3339Nano, u)
+	return w, err
+}
 func (s *Service) AddMessage(ctx context.Context, owner, id, role, content string) error {
 	_, err := s.db.ExecContext(ctx, `INSERT INTO agent_messages(id,owner_type,owner_id,role,content,created_at) VALUES(?,?,?,?,?,?)`, uuid.New().String(), owner, id, role, content, time.Now().UTC().Format(time.RFC3339Nano))
 	return err
+}
+func (s *Service) Messages(ctx context.Context, owner, id string) ([]Message, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id,owner_type,owner_id,role,content,created_at FROM agent_messages WHERE owner_type=? AND owner_id=? ORDER BY created_at,id`, owner, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Message{}
+	for rows.Next() {
+		var m Message
+		var at string
+		if err := rows.Scan(&m.ID, &m.OwnerType, &m.OwnerID, &m.Role, &m.Content, &at); err != nil {
+			return nil, err
+		}
+		m.CreatedAt, _ = time.Parse(time.RFC3339Nano, at)
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+func (s *Service) ResolveIncident(ctx context.Context, id string) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE incidents SET status='resolved',resolved_at=?,updated_at=? WHERE id=?`, time.Now().UTC().Format(time.RFC3339Nano), time.Now().UTC().Format(time.RFC3339Nano), id)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+func (s *Service) SetWorkOrderStatus(ctx context.Context, id, status string) error {
+	allowed := map[string]bool{"completed": true, "cancelled": true}
+	if !allowed[status] {
+		return fmt.Errorf("invalid status")
+	}
+	res, err := s.db.ExecContext(ctx, `UPDATE work_orders SET status=?,completed_at=?,updated_at=? WHERE id=?`, status, time.Now().UTC().Format(time.RFC3339Nano), time.Now().UTC().Format(time.RFC3339Nano), id)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
 }

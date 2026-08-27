@@ -1,4 +1,4 @@
-package chat
+package sharedchat
 
 import (
 	"AutoOps/internal/server/ai/tools"

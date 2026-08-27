@@ -1,4 +1,4 @@
-package chat
+package sharedchat
 
 import "github.com/cloudwego/eino/schema"
 
