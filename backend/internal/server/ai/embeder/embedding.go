@@ -69,7 +69,11 @@ func NewProvider(ctx context.Context, cfg config.EmbeddingConfig) (EmbeddingProv
 		if strings.TrimSpace(cfg.APIKey) == "" {
 			return nil, fmt.Errorf("embedding api_key is required for openai provider")
 		}
-		delegate, err = aclopenai.NewEmbeddingClient(ctx, &aclopenai.EmbeddingConfig{APIKey: cfg.APIKey, BaseURL: strings.TrimRight(cfg.BaseURL, "/"), Model: cfg.Model, Dimensions: &cfg.Dimension, HTTPClient: &http.Client{Timeout: timeout}})
+		// Do not send the optional OpenAI `dimensions` parameter. Many
+		// OpenAI-compatible providers (including SiliconFlow models such as
+		// BAAI/bge-large-zh-v1.5) reject it. The configured dimension is still
+		// enforced by EmbedStrings/Validate against the provider response.
+		delegate, err = aclopenai.NewEmbeddingClient(ctx, &aclopenai.EmbeddingConfig{APIKey: cfg.APIKey, BaseURL: strings.TrimRight(cfg.BaseURL, "/"), Model: cfg.Model, HTTPClient: &http.Client{Timeout: timeout}})
 	case "ollama":
 		base := cfg.BaseURL
 		if base == "" {
