@@ -1,4 +1,4 @@
-// prometheusTestServer 是一个模拟真实生产环境的 Prometheus 指标服务器。
+// prometheus-test-server 是一个模拟真实生产环境的 Prometheus 指标服务器。
 // 启动后会持续向 :2112/metrics 暴露模拟数据，包含正常、偶发错误、告警三种状态。
 // 同时模拟 5 个 HTTP 接口供 Prometheus 抓取 QPS / 延迟 / 错误率等指标。
 package main

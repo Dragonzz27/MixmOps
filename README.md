@@ -116,7 +116,7 @@ AutoOps 在宿主机运行，Minikube 只承载测试业务服务和监控组件
 ```bash
 minikube start
 eval $(minikube docker-env)
-docker build -t autoops-prometheus-test-server:local -f backend/prometheusTestServer/Dockerfile backend
+docker build -t autoops-prometheus-test-server:local -f tests/prometheus-test-server/Dockerfile tests/prometheus-test-server
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 helm install monitoring prometheus-community/kube-prometheus-stack -n monitoring --create-namespace \
   --set prometheus.service.type=NodePort --set prometheus.service.nodePort=30900
@@ -264,7 +264,7 @@ AutoOps/
 │       └── plan/               # 运维计划服务
 │   ├── pkg/                    # 配置、日志和通用工具
 │   ├── scripts/                # 后端辅助脚本
-│   ├── prometheusTestServer/   # Prometheus 测试服务器镜像
+│   ├── tests/prometheus-test-server/ # Prometheus 测试服务器
 │   ├── go.mod
 │   └── go.sum
 ├── deploy/helm/autoops-test/   # Minikube 测试 Helm Chart

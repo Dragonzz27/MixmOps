@@ -8,7 +8,7 @@
 
 ```bash
 eval $(minikube docker-env)
-docker build -t autoops-prometheus-test-server:local -f backend/prometheusTestServer/Dockerfile backend
+docker build -t autoops-prometheus-test-server:local -f tests/prometheus-test-server/Dockerfile tests/prometheus-test-server
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 helm install monitoring prometheus-community/kube-prometheus-stack -n monitoring --create-namespace \
   --set prometheus.service.type=NodePort --set prometheus.service.nodePort=30900
