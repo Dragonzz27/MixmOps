@@ -9,19 +9,11 @@ import (
 func TestInitConfig(t *testing.T) {
 	// 创建临时配置文件
 	tmpDir := t.TempDir()
-	if err := os.Mkdir(filepath.Join(tmpDir, "profiles"), 0755); err != nil {
-		t.Fatal(err)
-	}
-	base := "server:\n  host: testhost\n  port: 9999\nembedding:\n  provider: openai\n  model: test-model\n  dimension: 768\n  base_url: http://embedding\nqdrant:\n  host: qdrant-host\n  port: 6334\n  collection: test-collection\n"
-	profile := "prometheus:\n  url: http://prometheus:9090\nkubernetes:\n  namespace: test-ns\n"
-	if err := os.WriteFile(filepath.Join(tmpDir, "base.yaml"), []byte(base), 0644); err != nil {
+	env := "AUTOOPS_SERVER_HOST=testhost\nAUTOOPS_SERVER_PORT=9999\nEMBEDDING_PROVIDER=ollama\nEMBEDDING_MODEL=test-model\nEMBEDDING_DIMENSION=768\nEMBEDDING_BASE_URL=http://embedding\nAUTOOPS_QDRANT_HOST=qdrant-host\nAUTOOPS_QDRANT_PORT=6334\nAUTOOPS_QDRANT_COLLECTION=test-collection\nPROMETHEUS_URL=http://prometheus:9090\nAUTOOPS_K8S_NAMESPACE=test-ns\n"
+	if err := os.WriteFile(filepath.Join(tmpDir, ".env"), []byte(env), 0644); err != nil {
 		t.Fatalf("Failed to create test config file: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(tmpDir, "profiles", "test.yaml"), []byte(profile), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	cfg, err := InitConfig(tmpDir, "test")
+	cfg, err := InitConfig(filepath.Join(tmpDir, ".env"))
 	if err != nil {
 		t.Fatalf("InitConfig failed: %v", err)
 	}
@@ -55,9 +47,9 @@ func TestInitConfig(t *testing.T) {
 }
 
 func TestInitConfigFromFileNotFound(t *testing.T) {
-	_, err := InitConfig("nonexistent", "missing")
-	if err == nil {
-		t.Error("Expected error for nonexistent config file")
+	_, err := InitConfig(filepath.Join(t.TempDir(), "missing.env"))
+	if err != nil {
+		t.Errorf("missing optional env file should use defaults: %v", err)
 	}
 }
 

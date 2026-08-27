@@ -3,7 +3,6 @@ package config
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/spf13/viper"
@@ -26,7 +25,7 @@ type ServerConfig struct {
 	Port int    `mapstructure:"port"`
 }
 
-// EmbedderConfig 嵌入模型配置
+// EmbeddingConfig configures the selected embedding provider.
 type EmbeddingConfig struct {
 	Provider   string `mapstructure:"provider"`
 	Model      string `mapstructure:"model"`
@@ -72,33 +71,19 @@ type LogConfig struct {
 	File  string `mapstructure:"file"`
 }
 
-// InitConfig loads the base YAML configuration and a named environment profile.
-func InitConfig(configDir string, profile string) (*Config, error) {
-	if configDir == "" {
-		configDir = "./config"
+// InitConfig loads a dotenv file (normally backend/.env) and environment variables.
+// The dotenv file is optional; explicitly exported environment variables win.
+func InitConfig(envFile string) (*Config, error) {
+	if envFile == "" {
+		envFile = ".env"
 	}
-	if profile == "" {
-		profile = "minikube"
+	if err := loadDotenv(envFile); err != nil {
+		return nil, err
 	}
 	v := viper.New()
-	v.SetConfigType("yaml")
-	v.SetConfigFile(filepath.Join(configDir, "base.yaml"))
-	if err := v.ReadInConfig(); err != nil {
-		return nil, fmt.Errorf("failed to read base config: %w", err)
-	}
-	profileFile := filepath.Join(configDir, "profiles", profile+".yaml")
-	profileViper := viper.New()
-	profileViper.SetConfigType("yaml")
-	profileViper.SetConfigFile(profileFile)
-	if err := profileViper.ReadInConfig(); err != nil {
-		return nil, fmt.Errorf("failed to read profile %q: %w", profile, err)
-	}
-	if err := v.MergeConfigMap(profileViper.AllSettings()); err != nil {
-		return nil, fmt.Errorf("failed to merge profile %q: %w", profile, err)
-	}
-	v.SetEnvPrefix("AUTOOPS")
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
+	bindEnvironment(v)
 
 	// 设置默认值
 	setDefaults(v)
@@ -137,8 +122,48 @@ func InitConfig(configDir string, profile string) (*Config, error) {
 	if value := os.Getenv("EMBEDDING_BASE_URL"); value != "" {
 		cfg.Embedding.BaseURL = value
 	}
-
 	return &cfg, nil
+}
+
+func loadDotenv(path string) error {
+	b, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read env file: %w", err)
+	}
+	for _, line := range strings.Split(string(b), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		line = strings.TrimPrefix(line, "export ")
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		key, value := strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
+		value = strings.Trim(value, "\"'")
+		if key != "" {
+			if _, exists := os.LookupEnv(key); !exists {
+				_ = os.Setenv(key, value)
+			}
+		}
+	}
+	return nil
+}
+
+func bindEnvironment(v *viper.Viper) {
+	for key, env := range map[string]string{
+		"server.host": "AUTOOPS_SERVER_HOST", "server.port": "AUTOOPS_SERVER_PORT",
+		"embedding.provider": "EMBEDDING_PROVIDER", "embedding.model": "EMBEDDING_MODEL", "embedding.dimension": "EMBEDDING_DIMENSION", "embedding.base_url": "EMBEDDING_BASE_URL", "embedding.api_key": "EMBEDDING_API_KEY", "embedding.timeout": "EMBEDDING_TIMEOUT", "embedding.batch_size": "EMBEDDING_BATCH_SIZE", "embedding.max_retries": "EMBEDDING_MAX_RETRIES", "embedding.normalize": "EMBEDDING_NORMALIZE",
+		"qdrant.host": "AUTOOPS_QDRANT_HOST", "qdrant.port": "AUTOOPS_QDRANT_PORT", "qdrant.collection": "AUTOOPS_QDRANT_COLLECTION",
+		"openai.api_key": "OPENAI_API_KEY", "openai.model": "OPENAI_MODEL", "openai.api_base": "OPENAI_API_BASE",
+		"prometheus.url": "PROMETHEUS_URL", "kubernetes.enabled": "AUTOOPS_K8S_ENABLED", "kubernetes.kubeconfig": "AUTOOPS_K8S_KUBECONFIG", "kubernetes.context": "AUTOOPS_K8S_CONTEXT", "kubernetes.namespace": "AUTOOPS_K8S_NAMESPACE", "kubernetes.in_cluster": "AUTOOPS_K8S_IN_CLUSTER", "log.level": "AUTOOPS_LOG_LEVEL", "log.file": "AUTOOPS_LOG_FILE",
+	} {
+		_ = v.BindEnv(key, env)
+	}
 }
 
 // setDefaults 设置默认值
@@ -184,8 +209,6 @@ func setDefaults(v *viper.Viper) {
 func (c *Config) GetServerAddr() string {
 	return fmt.Sprintf("%s:%d", c.Server.Host, c.Server.Port)
 }
-
-// GetEmbedderAddr 获取嵌入模型服务地址
 
 // GetQdrantAddr 获取 Qdrant 服务地址
 func (c *Config) GetQdrantAddr() string {

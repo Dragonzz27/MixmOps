@@ -24,9 +24,8 @@ func main() {
 	ctx := context.Background()
 	// 初始化日志记录器
 	//初始化配置
-	configDir := os.Getenv("AUTOOPS_CONFIG_DIR")
-	profile := os.Getenv("AUTOOPS_PROFILE")
-	config, err := config.InitConfig(configDir, profile)
+	envFile := os.Getenv("AUTOOPS_ENV_FILE")
+	config, err := config.InitConfig(envFile)
 	if err != nil {
 		panic(err)
 	}

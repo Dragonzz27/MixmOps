@@ -81,20 +81,20 @@ docker run -p 6333:6333 -p 6334:6334 qdrant/qdrant
 
 3. **配置文件**
 
-准备配置目录并修改：
+准备环境变量文件并修改：
 
 ```bash
-cp -r backend/config /tmp/autoops-config
+cp backend/.env.example backend/.env
 ```
 
-编辑 `/tmp/autoops-config/base.yaml`，填入 API Key 和服务地址；按需修改 `/tmp/autoops-config/profiles/minikube.yaml`。
+编辑 `backend/.env`，填入 API Key 和服务地址。
 
 4. **运行服务**
 
 ```bash
 cd backend
 go mod tidy
-AUTOOPS_CONFIG_DIR=./config AUTOOPS_PROFILE=minikube go run ./cmd
+AUTOOPS_ENV_FILE=.env go run ./cmd
 ```
 
 服务将在 `http://localhost:8819` 启动。
@@ -123,13 +123,13 @@ helm install monitoring prometheus-community/kube-prometheus-stack -n monitoring
 helm upgrade --install autoops-test ./deploy/helm/autoops-test
 ```
 
-配置目录使用 `base.yaml` + `profiles/minikube.yaml`，配置 Minikube Prometheus 的 NodePort 地址，并配置本机 kubeconfig。AutoOps 通过 Kubernetes API 查询 Pod、Deployment、Events 和 Pod 日志，不执行写操作。
+配置统一使用 `backend/.env`（模板为 `.env.example`），配置 Minikube Prometheus 的 NodePort 地址，并配置本机 kubeconfig。AutoOps 通过 Kubernetes API 查询 Pod、Deployment、Events 和 Pod 日志，不执行写操作。
 
 ## 配置说明
 
-### backend/config/base.yaml 与 profiles/minikube.yaml
+### backend/.env
 
-基础配置和 Minikube 环境配置分开维护，完整示例见 `backend/config/config.example.yaml`。
+完整配置示例见 `backend/.env.example`。
 
 | 配置项 | 说明 |
 |--------|------|
@@ -233,10 +233,7 @@ AutoOps/
 ├── backend/                    # Go 后端模块
 │   ├── cmd/
 │   └── main.go                 # 程序入口
-│   ├── config/
-│   ├── base.yaml               # 应用基础配置
-│   ├── config.example.yaml     # 完整配置示例
-│   └── profiles/minikube.yaml  # Minikube 环境配置
+│   └── .env.example            # 环境变量模板
 │   ├── docs/                   # 知识库文档目录
 │   ├── internal/
 │   ├── handler/                # HTTP 处理器
@@ -271,7 +268,7 @@ AutoOps/
 │   ├── go.mod
 │   └── go.sum
 ├── deploy/helm/autoops-test/   # Minikube 测试 Helm Chart
-└── backend/config/             # 基础配置和环境 profile
+└── frontend/                   # Vite 前端
 ```
 
 ## 核心组件

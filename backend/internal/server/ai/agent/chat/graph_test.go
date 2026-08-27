@@ -16,7 +16,7 @@ import (
 )
 
 func TestGraphConstruction(t *testing.T) {
-	config, err := config.InitConfig("../../../../../config", "minikube")
+	config, err := config.InitConfig("../../../../../.env")
 	if err != nil {
 		t.Skipf("integration config unavailable: %v", err)
 	}
