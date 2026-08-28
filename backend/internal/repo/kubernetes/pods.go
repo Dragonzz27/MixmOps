@@ -40,9 +40,16 @@ func (r *repository) ListPods(ctx context.Context, namespace string) ([]PodInfo,
 }
 
 func (r *repository) DeletePod(ctx context.Context, namespace, name string) error {
+	if err := r.DeleteManagedPod(ctx, namespace, name); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *repository) IsManagedPod(ctx context.Context, namespace, name string) (bool, error) {
 	pod, err := r.client.CoreV1().Pods(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
-		return err
+		return false, err
 	}
 	managed := false
 	for _, owner := range pod.OwnerReferences {
@@ -50,6 +57,14 @@ func (r *repository) DeletePod(ctx context.Context, namespace, name string) erro
 			managed = true
 			break
 		}
+	}
+	return managed, nil
+}
+
+func (r *repository) DeleteManagedPod(ctx context.Context, namespace, name string) error {
+	managed, err := r.IsManagedPod(ctx, namespace, name)
+	if err != nil {
+		return err
 	}
 	if !managed {
 		return fmt.Errorf("pod %s is not controlled by a ReplicaSet", name)

@@ -42,6 +42,7 @@ type PrometheusAlertsOutput struct {
 
 // SimplifiedAlert 简化的告警信息
 type SimplifiedAlert struct {
+	Fingerprint string `json:"fingerprint,omitempty"`
 	AlertName   string `json:"alert_name" jsonschema:"description=告警名称，从 Prometheus 告警的 labels.alertname 字段提取"`
 	Description string `json:"description" jsonschema:"description=告警描述信息，从 Prometheus 告警的 annotations.description 字段提取"`
 	State       string `json:"state" jsonschema:"description=告警状态，通常为 'firing'（触发中）或 'pending'（待触发）"`
@@ -68,7 +69,7 @@ func QueryPrometheusAlerts(url string) (PrometheusAlertsOutput, error) {
 		if severity == "" {
 			severity = "unknown"
 		}
-		alerts = append(alerts, SimplifiedAlert{AlertName: name, Description: alert.Annotations["description"], State: alert.State, ActiveAt: alert.ActiveAt, Duration: calculateActiveTime(alert.ActiveAt), Severity: severity})
+		alerts = append(alerts, SimplifiedAlert{Fingerprint: alert.Labels["fingerprint"], AlertName: name, Description: alert.Annotations["description"], State: alert.State, ActiveAt: alert.ActiveAt, Duration: calculateActiveTime(alert.ActiveAt), Severity: severity})
 	}
 	return PrometheusAlertsOutput{Success: true, Alerts: alerts, Message: fmt.Sprintf("Successfully retrieved %d active alerts", len(alerts))}, nil
 }

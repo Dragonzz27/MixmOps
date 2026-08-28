@@ -14,11 +14,13 @@ type ModeHandler struct {
 	background *background.Service
 	cases      *cases.Service
 	kube       kubernetes.KubernetesRepository
+	supervisor *background.Supervisor
 }
 
 func NewModeHandler(bg *background.Service, cs *cases.Service, kube kubernetes.KubernetesRepository) *ModeHandler {
 	return &ModeHandler{background: bg, cases: cs, kube: kube}
 }
+func (h *ModeHandler) SetSupervisor(s *background.Supervisor) { h.supervisor = s }
 func (h *ModeHandler) AlertmanagerWebhook() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var body struct {
@@ -39,17 +41,29 @@ func (h *ModeHandler) AlertmanagerWebhook() gin.HandlerFunc {
 			if ns == "" {
 				ns = "autoops-test"
 			}
-			_, ok, err := h.background.CreateFromAlert(c.Request.Context(), background.Alert{Fingerprint: a.Fingerprint, Name: name, Namespace: ns, Labels: a.Labels, Annotations: a.Annotations})
+			var task background.Task
+			var ok bool
+			var err error
+			alert := background.Alert{Fingerprint: a.Fingerprint, Name: name, Namespace: ns, Labels: a.Labels, Annotations: a.Annotations}
+			if h.supervisor != nil {
+				task, ok, err = h.supervisor.HandleAlert(c.Request.Context(), alert)
+			} else {
+				task, ok, err = h.background.CreateFromAlert(c.Request.Context(), alert)
+			}
 			if err != nil {
 				c.JSON(500, gin.H{"message": err.Error()})
 				return
 			}
+			_ = task
 			if ok {
 				created++
 			}
 		}
 		c.JSON(202, gin.H{"created": created})
 	}
+}
+func (h *ModeHandler) BackgroundStatus() gin.HandlerFunc {
+	return func(c *gin.Context) { c.JSON(200, gin.H{"enabled": h.supervisor != nil}) }
 }
 func (h *ModeHandler) Tasks() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -146,6 +160,35 @@ func (h *ModeHandler) CreateIncident() gin.HandlerFunc {
 			return
 		}
 		c.JSON(201, item)
+	}
+}
+
+func (h *ModeHandler) RefreshIncidentContext() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		item, err := h.cases.GetIncident(c.Request.Context(), c.Param("id"))
+		if err != nil {
+			c.JSON(404, gin.H{"message": err.Error()})
+			return
+		}
+		// Context refresh is deliberately read-only; detailed evidence is collected by
+		// the background workflow and stored as the next snapshot.
+		c.JSON(200, item.Context)
+	}
+}
+
+func (h *ModeHandler) CreateIsolationTask() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		item, err := h.cases.GetIncident(c.Request.Context(), c.Param("id"))
+		if err != nil {
+			c.JSON(404, gin.H{"message": err.Error()})
+			return
+		}
+		t, _, err := h.background.CreateFromAlert(c.Request.Context(), background.Alert{Fingerprint: item.Fingerprint, Name: item.AlertName, Namespace: "autoops-test"})
+		if err != nil {
+			c.JSON(500, gin.H{"message": err.Error()})
+			return
+		}
+		c.JSON(201, t)
 	}
 }
 func (h *ModeHandler) WorkOrders() gin.HandlerFunc {

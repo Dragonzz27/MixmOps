@@ -16,6 +16,7 @@ type Config struct {
 	OpenAI     OpenAIConfig     `mapstructure:"openai"`
 	Prometheus PrometheusConfig `mapstructure:"prometheus"`
 	Kubernetes KubernetesConfig `mapstructure:"kubernetes"`
+	Background BackgroundConfig `mapstructure:"background"`
 	Log        LogConfig        `mapstructure:"log"`
 }
 
@@ -64,6 +65,17 @@ type KubernetesConfig struct {
 	Context    string `mapstructure:"context"`
 	Namespace  string `mapstructure:"namespace"`
 	InCluster  bool   `mapstructure:"in_cluster"`
+}
+
+type BackgroundConfig struct {
+	Enabled           bool   `mapstructure:"enabled"`
+	PollInterval      string `mapstructure:"poll_interval"`
+	Namespace         string `mapstructure:"namespace"`
+	AutoRepairEnabled bool   `mapstructure:"auto_repair_enabled"`
+	AutoRepairAlerts  string `mapstructure:"auto_repair_alerts"`
+	SevereAlerts      string `mapstructure:"severe_alerts"`
+	MaxRestarts       int    `mapstructure:"max_restarts"`
+	Cooldown          string `mapstructure:"cooldown"`
 }
 
 type LogConfig struct {
@@ -161,6 +173,7 @@ func bindEnvironment(v *viper.Viper) {
 		"qdrant.host": "AUTOOPS_QDRANT_HOST", "qdrant.port": "AUTOOPS_QDRANT_PORT", "qdrant.collection": "AUTOOPS_QDRANT_COLLECTION",
 		"openai.api_key": "OPENAI_API_KEY", "openai.model": "OPENAI_MODEL", "openai.api_base": "OPENAI_API_BASE",
 		"prometheus.url": "PROMETHEUS_URL", "kubernetes.enabled": "AUTOOPS_K8S_ENABLED", "kubernetes.kubeconfig": "AUTOOPS_K8S_KUBECONFIG", "kubernetes.context": "AUTOOPS_K8S_CONTEXT", "kubernetes.namespace": "AUTOOPS_K8S_NAMESPACE", "kubernetes.in_cluster": "AUTOOPS_K8S_IN_CLUSTER", "log.level": "AUTOOPS_LOG_LEVEL", "log.file": "AUTOOPS_LOG_FILE",
+		"background.enabled": "AUTOOPS_BACKGROUND_ENABLED", "background.poll_interval": "AUTOOPS_BACKGROUND_POLL_INTERVAL", "background.namespace": "AUTOOPS_BACKGROUND_NAMESPACE", "background.auto_repair_enabled": "AUTOOPS_AUTO_REPAIR_ENABLED", "background.auto_repair_alerts": "AUTOOPS_AUTO_REPAIR_ALERTS", "background.severe_alerts": "AUTOOPS_SEVERE_ALERTS", "background.max_restarts": "AUTOOPS_AUTO_REPAIR_MAX_RESTARTS", "background.cooldown": "AUTOOPS_AUTO_REPAIR_COOLDOWN",
 	} {
 		_ = v.BindEnv(key, env)
 	}
@@ -171,6 +184,14 @@ func setDefaults(v *viper.Viper) {
 	// Server 默认值
 	v.SetDefault("server.host", "localhost")
 	v.SetDefault("server.port", 8819)
+	v.SetDefault("background.enabled", true)
+	v.SetDefault("background.poll_interval", "30s")
+	v.SetDefault("background.namespace", "autoops-test")
+	v.SetDefault("background.auto_repair_enabled", true)
+	v.SetDefault("background.auto_repair_alerts", "AutoOpsPodRestartHigh,AutoOpsPodNotReady")
+	v.SetDefault("background.severe_alerts", "AutoOpsServiceUnavailable,AutoOpsDeploymentUnavailable")
+	v.SetDefault("background.max_restarts", 3)
+	v.SetDefault("background.cooldown", "10m")
 
 	// Embedder 默认值
 	v.SetDefault("embedding.provider", "openai")

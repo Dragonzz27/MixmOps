@@ -24,6 +24,8 @@ type KubernetesRepository interface {
 
 type PodActions interface {
 	DeletePod(context.Context, string, string) error
+	DeleteManagedPod(context.Context, string, string) error
+	IsManagedPod(context.Context, string, string) (bool, error)
 }
 
 type repository struct{ client kubernetes.Interface }
