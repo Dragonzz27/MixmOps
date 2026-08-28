@@ -5,6 +5,7 @@ import (
 
 	"AutoOps/internal/repo/kubernetes"
 	"AutoOps/internal/server/background"
+	backgroundsupervisor "AutoOps/internal/server/background/supervisor"
 	"AutoOps/internal/server/cases"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -14,13 +15,13 @@ type ModeHandler struct {
 	background *background.Service
 	cases      *cases.Service
 	kube       kubernetes.KubernetesRepository
-	supervisor *background.Supervisor
+	supervisor *backgroundsupervisor.Supervisor
 }
 
 func NewModeHandler(bg *background.Service, cs *cases.Service, kube kubernetes.KubernetesRepository) *ModeHandler {
 	return &ModeHandler{background: bg, cases: cs, kube: kube}
 }
-func (h *ModeHandler) SetSupervisor(s *background.Supervisor) { h.supervisor = s }
+func (h *ModeHandler) SetSupervisor(s *backgroundsupervisor.Supervisor) { h.supervisor = s }
 func (h *ModeHandler) AlertmanagerWebhook() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var body struct {
@@ -63,7 +64,36 @@ func (h *ModeHandler) AlertmanagerWebhook() gin.HandlerFunc {
 	}
 }
 func (h *ModeHandler) BackgroundStatus() gin.HandlerFunc {
-	return func(c *gin.Context) { c.JSON(200, gin.H{"enabled": h.supervisor != nil}) }
+	return func(c *gin.Context) {
+		if h.supervisor == nil {
+			c.JSON(200, gin.H{"enabled": false})
+			return
+		}
+		c.JSON(200, h.supervisor.Status())
+	}
+}
+func (h *ModeHandler) RetryTask() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if h.supervisor == nil {
+			c.JSON(503, gin.H{"message": "background supervisor unavailable"})
+			return
+		}
+		if _, err := h.background.Get(c.Request.Context(), c.Param("id")); err != nil {
+			c.JSON(404, gin.H{"message": err.Error()})
+			return
+		}
+		h.supervisor.Schedule(c.Param("id"))
+		c.JSON(202, gin.H{"message": "background remediation scheduled"})
+	}
+}
+func (h *ModeHandler) CancelTask() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if err := h.background.SetStatus(c.Request.Context(), c.Param("id"), background.StatusCancelled); err != nil {
+			c.JSON(500, gin.H{"message": err.Error()})
+			return
+		}
+		c.JSON(200, gin.H{"message": "task cancelled"})
+	}
 }
 func (h *ModeHandler) Tasks() gin.HandlerFunc {
 	return func(c *gin.Context) {

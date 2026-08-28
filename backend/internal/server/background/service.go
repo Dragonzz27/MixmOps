@@ -37,17 +37,11 @@ const (
 	SeverityUnknown Severity = "unknown"
 )
 
-type Classification struct {
-	Severity   Severity `json:"severity"`
-	Confidence string   `json:"confidence"`
-	Reason     string   `json:"reason"`
-	TargetPod  string   `json:"target_pod,omitempty"`
-}
-
 type Task struct {
 	ID             string          `json:"id"`
 	Fingerprint    string          `json:"alert_fingerprint"`
 	AlertName      string          `json:"alert_name"`
+	AlertSeverity  string          `json:"alert_severity,omitempty"`
 	Namespace      string          `json:"namespace"`
 	Status         string          `json:"status"`
 	TargetPod      string          `json:"target_pod,omitempty"`
@@ -83,7 +77,7 @@ func (s *Service) CreateFromAlert(ctx context.Context, alert Alert) (Task, bool,
 	if ns == "" {
 		ns = "autoops-test"
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO background_tasks(id,alert_fingerprint,alert_name,namespace,status,severity,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)`, id, alert.Fingerprint, alert.Name, ns, StatusReceived, string(SeverityUnknown), now, now)
+	_, err := s.db.ExecContext(ctx, `INSERT INTO background_tasks(id,alert_fingerprint,alert_name,namespace,alert_severity,status,severity,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)`, id, alert.Fingerprint, alert.Name, ns, alert.Labels["severity"], StatusReceived, string(SeverityUnknown), now, now)
 	if err != nil {
 		if isUnique(err) {
 			return s.getByFingerprint(ctx, alert.Fingerprint)
@@ -94,41 +88,6 @@ func (s *Service) CreateFromAlert(ctx context.Context, alert Alert) (Task, bool,
 	return task, true, err
 }
 
-// Classify deterministically decides whether an alert is eligible for automatic repair.
-func (s *Service) Classify(ctx context.Context, taskID string, alert Alert, autoRepair, severe map[string]bool, maxRestarts int) (Classification, error) {
-	if alert.Labels["severity"] == "critical" || severe[alert.Name] {
-		return Classification{Severity: SeveritySevere, Confidence: "high", Reason: "critical or explicitly severe alert"}, s.updateClassification(ctx, taskID, SeveritySevere, "critical or explicitly severe alert", "")
-	}
-	if !autoRepair[alert.Name] {
-		return Classification{Severity: SeverityUnknown, Confidence: "high", Reason: "alert is not in automatic repair allowlist"}, s.updateClassification(ctx, taskID, SeverityUnknown, "alert is not in automatic repair allowlist", "")
-	}
-	if s.kube == nil {
-		return Classification{Severity: SeverityUnknown, Confidence: "high", Reason: "Kubernetes evidence unavailable"}, s.updateClassification(ctx, taskID, SeverityUnknown, "Kubernetes evidence unavailable", "")
-	}
-	pods, err := s.kube.ListPods(ctx, alert.Namespace)
-	if err != nil {
-		return Classification{Severity: SeverityUnknown, Reason: err.Error()}, s.updateClassification(ctx, taskID, SeverityUnknown, err.Error(), "")
-	}
-	var target string
-	abnormal := 0
-	for _, p := range pods {
-		if !p.Ready || (maxRestarts > 0 && int(p.Restarts) >= maxRestarts) {
-			abnormal++
-			if target == "" {
-				target = p.Name
-			}
-		}
-	}
-	if abnormal != 1 {
-		reason := fmt.Sprintf("%d abnormal pods detected", abnormal)
-		return Classification{Severity: SeveritySevere, Confidence: "high", Reason: reason}, s.updateClassification(ctx, taskID, SeveritySevere, reason, "")
-	}
-	return Classification{Severity: SeveritySimple, Confidence: "medium", Reason: "single abnormal pod matches automatic repair allowlist", TargetPod: target}, s.updateClassification(ctx, taskID, SeveritySimple, "single abnormal pod matches automatic repair allowlist", target)
-}
-func (s *Service) updateClassification(ctx context.Context, id string, sev Severity, reason, pod string) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE background_tasks SET status=?,severity=?,severity_reason=?,target_pod=CASE WHEN ?='' THEN target_pod ELSE ? END,updated_at=? WHERE id=?`, StatusClassifying, string(sev), reason, pod, pod, time.Now().UTC().Format(time.RFC3339Nano), id)
-	return err
-}
 func isUnique(err error) bool {
 	return err != nil && (len(err.Error()) > 0 && (contains(err.Error(), "UNIQUE") || contains(err.Error(), "constraint")))
 }
@@ -150,7 +109,7 @@ func (s *Service) getByFingerprint(ctx context.Context, fp string) (Task, bool, 
 	return t, false, err
 }
 func (s *Service) List(ctx context.Context) ([]Task, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id,alert_fingerprint,alert_name,namespace,status,target_pod,analysis,proposed_action,severity,severity_reason,repair_status,repair_result,incident_id,created_at,updated_at FROM background_tasks ORDER BY created_at DESC`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id,alert_fingerprint,alert_name,namespace,alert_severity,status,target_pod,analysis,proposed_action,severity,severity_reason,repair_status,repair_result,incident_id,created_at,updated_at FROM background_tasks ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -170,7 +129,7 @@ func (s *Service) Get(ctx context.Context, id string) (Task, error) {
 	return t, err
 }
 func (s *Service) get(ctx context.Context, id string) (Task, bool, error) {
-	row := s.db.QueryRowContext(ctx, `SELECT id,alert_fingerprint,alert_name,namespace,status,target_pod,analysis,proposed_action,severity,severity_reason,repair_status,repair_result,incident_id,created_at,updated_at FROM background_tasks WHERE id=?`, id)
+	row := s.db.QueryRowContext(ctx, `SELECT id,alert_fingerprint,alert_name,namespace,alert_severity,status,target_pod,analysis,proposed_action,severity,severity_reason,repair_status,repair_result,incident_id,created_at,updated_at FROM background_tasks WHERE id=?`, id)
 	t, err := scanTask(row)
 	return t, true, err
 }
@@ -181,7 +140,7 @@ func scanTask(row scanner) (Task, error) {
 	var t Task
 	var created, updated, sev string
 	var action sql.NullString
-	err := row.Scan(&t.ID, &t.Fingerprint, &t.AlertName, &t.Namespace, &t.Status, &t.TargetPod, &t.Analysis, &action, &sev, &t.SeverityReason, &t.RepairStatus, &t.RepairResult, &t.IncidentID, &created, &updated)
+	err := row.Scan(&t.ID, &t.Fingerprint, &t.AlertName, &t.Namespace, &t.AlertSeverity, &t.Status, &t.TargetPod, &t.Analysis, &action, &sev, &t.SeverityReason, &t.RepairStatus, &t.RepairResult, &t.IncidentID, &created, &updated)
 	t.Severity = Severity(sev)
 	t.ProposedAction = json.RawMessage(action.String)
 	t.CreatedAt, _ = time.Parse(time.RFC3339Nano, created)
@@ -204,6 +163,14 @@ func (s *Service) MarkWaitingHuman(ctx context.Context, id string) (Task, error)
 
 func (s *Service) SetRepair(ctx context.Context, id, status, result string) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE background_tasks SET repair_status=?,repair_result=?,updated_at=? WHERE id=?`, status, result, time.Now().UTC().Format(time.RFC3339Nano), id)
+	return err
+}
+func (s *Service) SetEvidence(ctx context.Context, id string, evidence []byte) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE background_tasks SET evidence_snapshot=?,updated_at=? WHERE id=?`, string(evidence), time.Now().UTC().Format(time.RFC3339Nano), id)
+	return err
+}
+func (s *Service) SetDecision(ctx context.Context, id, severity, reason, pod, decision string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE background_tasks SET severity=?,severity_reason=?,target_pod=?,analysis=?,proposed_action=?,updated_at=? WHERE id=?`, severity, reason, pod, decision, decision, time.Now().UTC().Format(time.RFC3339Nano), id)
 	return err
 }
 func (s *Service) SetStatus(ctx context.Context, id, status string) error {

@@ -5,14 +5,18 @@ import (
 	kuberepo "AutoOps/internal/repo/kubernetes"
 	indexer "AutoOps/internal/repo/qrdant/indexer"
 	"AutoOps/internal/repo/sqlite"
+	backgroundagent "AutoOps/internal/server/ai/agent/background"
 	"AutoOps/internal/server/ai/agent/shared"
 	"AutoOps/internal/server/background"
+	backgroundremediation "AutoOps/internal/server/background/remediation"
+	backgroundsupervisor "AutoOps/internal/server/background/supervisor"
 	"AutoOps/internal/server/cases"
 	"AutoOps/internal/server/conversation"
 	knowledgeindex "AutoOps/internal/server/knowledge_index"
 	maintenancedocument "AutoOps/internal/server/maintenance_document"
 	"AutoOps/pkg/config"
 	"context"
+	"fmt"
 
 	"github.com/cloudwego/eino/components/document"
 	"github.com/cloudwego/eino/compose"
@@ -56,13 +60,20 @@ func InitRouter(ctx context.Context, r *gin.Engine, loger *logrus.Logger, config
 	bg := background.NewService(database.DB, kube)
 	cs := cases.NewService(database.DB)
 	modes := handler.NewModeHandler(bg, cs, kube)
-	supervisor := background.NewSupervisor(bg, cs, kube, config.Background, config.GetPrometheusURL(), incidentRunner)
+	remediationLLM, err := backgroundagent.NewAgent(ctx, config, kube)
+	if err != nil {
+		panic(fmt.Errorf("initialize background remediation agent: %w", err))
+	}
+	remediationAgent := backgroundremediation.New(bg, cs, kube, config.Background, remediationLLM)
+	supervisor := backgroundsupervisor.New(bg, remediationAgent, config.Background, config.GetPrometheusURL())
 	modes.SetSupervisor(supervisor)
 	supervisor.Start(ctx)
 	r.POST("/webhooks/alertmanager", modes.AlertmanagerWebhook())
 	r.GET("/background/status", modes.BackgroundStatus())
 	r.GET("/background/tasks", modes.Tasks())
 	r.GET("/background/tasks/:id", modes.Task())
+	r.POST("/background/tasks/:id/retry", modes.RetryTask())
+	r.POST("/background/tasks/:id/cancel", modes.CancelTask())
 	r.POST("/background/tasks/:id/approve", modes.Approve())
 	r.POST("/background/tasks/:id/reject", modes.Reject())
 	r.GET("/incidents", modes.Incidents())

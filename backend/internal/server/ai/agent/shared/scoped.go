@@ -47,6 +47,16 @@ func BuildScopedAgent(ctx context.Context, cfg *config.Config, kube kuberepo.Kub
 			return nil, e
 		}
 		all = append(all, gens...)
+	} else if mode == "background" {
+		alerts, e := tools.NewPrometheusAlertsTool(cfg.GetPrometheusURL())
+		if e != nil {
+			return nil, e
+		}
+		metrics, e := tools.NewPrometheusQueryTool(cfg.GetPrometheusURL())
+		if e != nil {
+			return nil, e
+		}
+		all = append(all, alerts, metrics)
 	} else {
 		return nil, fmt.Errorf("unknown agent mode %q", mode)
 	}
