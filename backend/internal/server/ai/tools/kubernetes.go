@@ -16,7 +16,7 @@ const maxKubernetesOutput = 12000
 
 type KubernetesResourcesInput struct {
 	Namespace string `json:"namespace,omitempty" jsonschema:"description=Namespace to inspect; defaults to the configured test namespace"`
-	Resource  string `json:"resource,omitempty" jsonschema:"description=Resource type: pods, deployments, or all"`
+	Resource  string `json:"resource,omitempty" jsonschema:"description=Resource type: pods, deployments, services, or all"`
 }
 type KubernetesEventsInput struct {
 	Namespace string `json:"namespace,omitempty"`
@@ -59,7 +59,14 @@ func NewKubernetesTools(repo kuberepo.KubernetesRepository, defaultNamespace str
 			}
 			out["deployments"] = v
 		}
-		if resource != "pods" && resource != "deployments" && resource != "all" {
+		if resource == "services" || resource == "all" {
+			v, err := repo.ListServices(ctx, ns)
+			if err != nil {
+				return "", err
+			}
+			out["services"] = v
+		}
+		if resource != "pods" && resource != "deployments" && resource != "services" && resource != "all" {
 			return "", fmt.Errorf("unsupported Kubernetes resource %q", in.Resource)
 		}
 		return marshalLimited(out)

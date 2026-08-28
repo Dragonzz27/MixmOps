@@ -128,7 +128,7 @@ type PrometheusInput struct {
 // 创建工具
 func NewPrometheusAlertsTool(url string) (tool.InvokableTool, error) {
 	return utils.InferTool("query_prometheus_alerts",
-		"Query active alerts from Prometheus alerting system. This tool retrieves all currently active/firing alerts including their labels, annotations, state, and values. Use this tool when you need to check what alerts are currently firing, investigate alert conditions, or monitor alert status.",
+		"Query active alerts from Prometheus alerting system. Use this tool for incident reports and background operations; it returns labels, annotations, state, severity, activation time, and duration.",
 		func(ctx context.Context, input PrometheusInput) (output string, err error) {
 			result, err := QueryPrometheusAlerts(url)
 			if err != nil {

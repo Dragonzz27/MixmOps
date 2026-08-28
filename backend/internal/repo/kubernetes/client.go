@@ -17,6 +17,7 @@ import (
 type KubernetesRepository interface {
 	ListPods(context.Context, string) ([]PodInfo, error)
 	ListDeployments(context.Context, string) ([]DeploymentInfo, error)
+	ListServices(context.Context, string) ([]ServiceInfo, error)
 	ListEvents(context.Context, string) ([]EventInfo, error)
 	GetPodLogs(context.Context, string, string, string, LogOptions) (string, error)
 }

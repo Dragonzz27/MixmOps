@@ -29,7 +29,17 @@ func (u chatServer) newReactAgentLambda(ctx context.Context) (node *compose.Lamb
 	if err != nil {
 		return nil, err
 	}
-	allTools := []tool.BaseTool{timeTool, retrieveTool, promethesTool}
+	metricsTool, err := tools.NewPrometheusQueryTool(u.config.GetPrometheusURL())
+	if err != nil {
+		return nil, err
+	}
+	generationTools, err := tools.NewGenerationTools()
+	if err != nil {
+		return nil, err
+	}
+	allTools := []tool.BaseTool{timeTool, retrieveTool, promethesTool, metricsTool}
+	// Generation tools are side-effect free and support daily work-order conversations.
+	allTools = append(allTools, generationTools...)
 	if u.kubernetes != nil {
 		kubeTools, kubeErr := tools.NewKubernetesTools(u.kubernetes, u.config.Kubernetes.Namespace)
 		if kubeErr != nil {
