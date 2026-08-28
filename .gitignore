@@ -22,6 +22,9 @@ config.json
 # Uploads
 /uploads/
 
+# Local runtime data
+/backend/data/
+
 # Logs
 *.log
 *.pid
