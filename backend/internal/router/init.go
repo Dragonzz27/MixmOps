@@ -5,7 +5,7 @@ import (
 	kuberepo "AutoOps/internal/repo/kubernetes"
 	indexer "AutoOps/internal/repo/qrdant/indexer"
 	"AutoOps/internal/repo/sqlite"
-	"AutoOps/internal/server/ai/agent/sharedchat"
+	"AutoOps/internal/server/ai/agent/shared"
 	"AutoOps/internal/server/background"
 	"AutoOps/internal/server/cases"
 	"AutoOps/internal/server/conversation"
@@ -22,7 +22,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func InitRouter(ctx context.Context, r *gin.Engine, loger *logrus.Logger, config *config.Config, runner compose.Runnable[document.Source, bool], runnerChat compose.Runnable[*sharedchat.UserMessage, *schema.Message], kube kuberepo.KubernetesRepository, docIndexer indexer.QdranIndexerServer, database *sqlite.DB) {
+func InitRouter(ctx context.Context, r *gin.Engine, loger *logrus.Logger, config *config.Config, runner compose.Runnable[document.Source, bool], incidentRunner compose.Runnable[*shared.UserMessage, *schema.Message], workOrderRunner compose.Runnable[*shared.UserMessage, *schema.Message], kube kuberepo.KubernetesRepository, docIndexer indexer.QdranIndexerServer, database *sqlite.DB) {
 	//cors
 	corsConfig := cors.DefaultConfig()
 	corsConfig.AllowOrigins = []string{"*"}
@@ -56,7 +56,7 @@ func InitRouter(ctx context.Context, r *gin.Engine, loger *logrus.Logger, config
 	bg := background.NewService(database.DB, kube)
 	cs := cases.NewService(database.DB)
 	modes := handler.NewModeHandler(bg, cs, kube)
-	supervisor := background.NewSupervisor(bg, cs, kube, config.Background, config.GetPrometheusURL(), runnerChat)
+	supervisor := background.NewSupervisor(bg, cs, kube, config.Background, config.GetPrometheusURL(), incidentRunner)
 	modes.SetSupervisor(supervisor)
 	supervisor.Start(ctx)
 	r.POST("/webhooks/alertmanager", modes.AlertmanagerWebhook())
@@ -77,7 +77,7 @@ func InitRouter(ctx context.Context, r *gin.Engine, loger *logrus.Logger, config
 	r.GET("/work-orders/:id", modes.WorkOrder())
 	r.POST("/work-orders/:id/complete", modes.CompleteWorkOrder())
 	r.POST("/work-orders/:id/cancel", modes.CancelWorkOrder())
-	conversationHandler := handler.NewConversationHandler(conversation.NewService(cs, runnerChat))
+	conversationHandler := handler.NewConversationHandler(conversation.NewService(cs, incidentRunner, workOrderRunner))
 	r.GET("/incidents/:id/messages", conversationHandler.History(conversation.OwnerIncident))
 	r.POST("/incidents/:id/chat", conversationHandler.Chat(conversation.OwnerIncident))
 	r.POST("/incidents/:id/chatStream", conversationHandler.Stream(conversation.OwnerIncident))

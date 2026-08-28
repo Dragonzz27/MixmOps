@@ -7,7 +7,7 @@ import (
 	"io"
 	"strings"
 
-	sharedchat "AutoOps/internal/server/ai/agent/sharedchat"
+	shared "AutoOps/internal/server/ai/agent/shared"
 	"AutoOps/internal/server/cases"
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
@@ -19,12 +19,20 @@ const (
 )
 
 type Service struct {
-	cases  *cases.Service
-	runner compose.Runnable[*sharedchat.UserMessage, *schema.Message]
+	cases           *cases.Service
+	incidentRunner  compose.Runnable[*shared.UserMessage, *schema.Message]
+	workOrderRunner compose.Runnable[*shared.UserMessage, *schema.Message]
 }
 
-func NewService(cs *cases.Service, runner compose.Runnable[*sharedchat.UserMessage, *schema.Message]) *Service {
-	return &Service{cases: cs, runner: runner}
+func NewService(cs *cases.Service, runners ...compose.Runnable[*shared.UserMessage, *schema.Message]) *Service {
+	s := &Service{cases: cs}
+	if len(runners) > 0 {
+		s.incidentRunner = runners[0]
+	}
+	if len(runners) > 1 {
+		s.workOrderRunner = runners[1]
+	}
+	return s
 }
 func (s *Service) History(ctx context.Context, owner, id string) ([]cases.Message, error) {
 	if !validOwner(owner) {
@@ -37,7 +45,14 @@ func (s *Service) Chat(ctx context.Context, owner, id, message string) (string, 
 	if err != nil {
 		return "", err
 	}
-	out, err := s.runner.Invoke(ctx, &sharedchat.UserMessage{ID: owner + ":" + id, Query: query, History: history})
+	runner := s.incidentRunner
+	if owner == OwnerWorkOrder {
+		runner = s.workOrderRunner
+	}
+	if runner == nil {
+		return "", fmt.Errorf("agent for %s is unavailable", owner)
+	}
+	out, err := runner.Invoke(ctx, &shared.UserMessage{ID: owner + ":" + id, Query: query, History: history})
 	if err != nil {
 		return "", err
 	}
@@ -51,7 +66,14 @@ func (s *Service) Stream(ctx context.Context, owner, id, message string, output 
 	if err != nil {
 		return err
 	}
-	stream, err := s.runner.Stream(ctx, &sharedchat.UserMessage{ID: owner + ":" + id, Query: query, History: history})
+	runner := s.incidentRunner
+	if owner == OwnerWorkOrder {
+		runner = s.workOrderRunner
+	}
+	if runner == nil {
+		return fmt.Errorf("agent for %s is unavailable", owner)
+	}
+	stream, err := runner.Stream(ctx, &shared.UserMessage{ID: owner + ":" + id, Query: query, History: history})
 	if err != nil {
 		return err
 	}

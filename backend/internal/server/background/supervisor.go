@@ -8,7 +8,7 @@ import (
 	"time"
 
 	kuberepo "AutoOps/internal/repo/kubernetes"
-	sharedchat "AutoOps/internal/server/ai/agent/sharedchat"
+	shared "AutoOps/internal/server/ai/agent/shared"
 	"AutoOps/internal/server/ai/tools"
 	"AutoOps/internal/server/cases"
 	"AutoOps/pkg/config"
@@ -25,11 +25,11 @@ type Supervisor struct {
 	cfg           config.BackgroundConfig
 	prometheusURL string
 	cancel        context.CancelFunc
-	runner        compose.Runnable[*sharedchat.UserMessage, *schema.Message]
+	runner        compose.Runnable[*shared.UserMessage, *schema.Message]
 }
 
-func NewSupervisor(s *Service, cs *cases.Service, kube kuberepo.KubernetesRepository, cfg config.BackgroundConfig, prometheusURL string, runners ...compose.Runnable[*sharedchat.UserMessage, *schema.Message]) *Supervisor {
-	var runner compose.Runnable[*sharedchat.UserMessage, *schema.Message]
+func NewSupervisor(s *Service, cs *cases.Service, kube kuberepo.KubernetesRepository, cfg config.BackgroundConfig, prometheusURL string, runners ...compose.Runnable[*shared.UserMessage, *schema.Message]) *Supervisor {
+	var runner compose.Runnable[*shared.UserMessage, *schema.Message]
 	if len(runners) > 0 {
 		runner = runners[0]
 	}
@@ -171,7 +171,7 @@ func (s *Supervisor) toIncident(ctx context.Context, task Task, reason string) (
 		}
 	}
 	if s.runner != nil {
-		if out, e := s.runner.Invoke(ctx, &sharedchat.UserMessage{ID: "background:" + task.ID, Query: "请基于以下后台任务证据给出保守的故障分析，禁止执行写操作：" + fmt.Sprint(snapshot)}); e == nil {
+		if out, e := s.runner.Invoke(ctx, &shared.UserMessage{ID: "background:" + task.ID, Query: "请基于以下后台任务证据给出保守的故障分析，禁止执行写操作：" + fmt.Sprint(snapshot)}); e == nil {
 			snapshot["agent_analysis"] = out.Content
 		}
 	}
