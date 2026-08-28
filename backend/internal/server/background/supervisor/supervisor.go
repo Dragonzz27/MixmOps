@@ -83,7 +83,7 @@ func (s *Supervisor) Schedule(taskID string) {
 		return
 	}
 	go func() {
-		workCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		workCtx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		defer cancel()
 		if e := s.processor.Process(workCtx, taskID); e != nil {
 			_ = s.tasks.SetStatus(context.Background(), taskID, background.StatusFailed)

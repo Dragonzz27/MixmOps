@@ -115,6 +115,7 @@ func (h *ModeHandler) Task() gin.HandlerFunc {
 		c.JSON(200, t)
 	}
 }
+func (h *ModeHandler) TaskTimeline() gin.HandlerFunc { return func(c *gin.Context) { timeline,err:=h.background.TimelineList(c.Request.Context(),c.Param("id"));if err!=nil{c.JSON(500,gin.H{"message":err.Error()});return};c.JSON(200,gin.H{"timeline":timeline}) } }
 func (h *ModeHandler) Approve() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		t, err := h.background.Approve(c.Request.Context(), c.Param("id"), c.GetHeader("X-Operator"))

@@ -73,6 +73,7 @@ func InitRouter(ctx context.Context, r *gin.Engine, loger *logrus.Logger, config
 	r.GET("/background/status", modes.BackgroundStatus())
 	r.GET("/background/tasks", modes.Tasks())
 	r.GET("/background/tasks/:id", modes.Task())
+	r.GET("/background/tasks/:id/timeline", modes.TaskTimeline())
 	r.POST("/background/tasks/:id/retry", modes.RetryTask())
 	r.POST("/background/tasks/:id/cancel", modes.CancelTask())
 	r.POST("/background/tasks/:id/approve", modes.Approve())

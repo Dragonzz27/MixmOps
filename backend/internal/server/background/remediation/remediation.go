@@ -58,27 +58,109 @@ func (a *Agent) Process(parent context.Context, taskID string) error {
 		return nil
 	}
 	defer a.running.Delete(taskID)
-	ctx, cancel := context.WithTimeout(parent, 60*time.Second)
+	ctx, cancel := context.WithTimeout(parent, TaskTimeout)
 	defer cancel()
 	task, err := a.tasks.Get(ctx, taskID)
 	if err != nil {
 		return err
 	}
-	_ = a.tasks.SetStatus(ctx, taskID, background.StatusCollecting)
-	evidence := a.collect(ctx, task)
-	b, _ := json.Marshal(evidence)
-	_ = a.tasks.SetEvidence(ctx, taskID, b)
-	_ = a.tasks.Timeline(ctx, taskID, "evidence_collected", "success", string(b))
-	_ = a.tasks.SetStatus(ctx, taskID, background.StatusAnalyzing)
-	decision := a.analyze(ctx, task, string(b))
-	db, _ := json.Marshal(decision)
-	_ = a.tasks.SetDecision(ctx, taskID, decision.Severity, decision.Reason, decision.TargetPod, string(db))
-	_ = a.tasks.SetStatus(ctx, taskID, "policy_evaluating")
-	plan := a.evaluate(ctx, task, decision, evidence)
-	if !plan.Allowed {
-		return a.createIncident(ctx, task, evidence, decision, plan, "policy rejected automatic repair")
+	maxRounds := task.MaxRounds
+	if maxRounds <= 0 {
+		maxRounds = 3
 	}
-	return a.executeAndVerify(ctx, task, plan, evidence, decision)
+	for round := 1; round <= maxRounds; round++ {
+		_ = a.tasks.SetRound(ctx, taskID, round)
+		_ = a.tasks.SetStatus(ctx, taskID, background.StatusCollecting)
+		evidence := a.collect(ctx, task)
+		eb, _ := json.Marshal(evidence)
+		_ = a.tasks.SetEvidence(ctx, taskID, eb)
+		_ = a.tasks.Timeline(ctx, taskID, "evidence_collected", "success", string(eb))
+		_ = a.tasks.SetStatus(ctx, taskID, background.StatusAnalyzing)
+		decision := a.analyze(ctx, task, string(eb))
+		db, _ := json.Marshal(decision)
+		_ = a.tasks.SetDecision(ctx, taskID, decision.Severity, decision.Reason, decision.TargetPod, string(db))
+		_ = a.tasks.Timeline(ctx, taskID, "plan_created", "success", string(db))
+		_ = a.tasks.SetStatus(ctx, taskID, "policy_evaluating")
+		plan := a.evaluate(ctx, task, decision, evidence)
+		pb, _ := json.Marshal(plan)
+		_ = a.tasks.SetPlan(ctx, taskID, pb)
+		_ = a.tasks.Timeline(ctx, taskID, "policy_evaluated", "success", string(pb))
+		if !plan.Allowed {
+			return a.createIncident(ctx, task, evidence, decision, plan, "policy rejected automatic repair")
+		}
+		_ = a.tasks.SetStatus(ctx, taskID, background.StatusAutoRepairPending)
+		_ = a.tasks.SetRepair(ctx, taskID, "pending", "")
+		actions := a.kube.(kuberepo.PodActions)
+		_ = a.tasks.SetStatus(ctx, taskID, background.StatusAutoRepairing)
+		_ = a.tasks.Timeline(ctx, taskID, "repair_started", "success", plan.Pod)
+		if err := actions.DeleteManagedPod(ctx, task.Namespace, plan.Pod); err != nil {
+			_ = a.tasks.SetRepair(ctx, taskID, "failed", err.Error())
+			_ = a.tasks.Timeline(ctx, taskID, "repair_failed", "failed", err.Error())
+			return a.createIncident(ctx, task, evidence, decision, plan, err.Error())
+		}
+		_ = a.tasks.SetRepair(ctx, taskID, "completed", "system deleted managed Pod "+plan.Pod)
+		_ = a.tasks.SetStatus(ctx, taskID, background.StatusWaitingVerification)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(ReplanInterval):
+		}
+		obs := a.observe(ctx, task, plan)
+		ob, _ := json.Marshal(obs)
+		_ = a.tasks.SetObservation(ctx, taskID, ob)
+		_ = a.tasks.Timeline(ctx, taskID, "observation_collected", "success", string(ob))
+		if obs.PodsHealthy && obs.DeploymentHealthy {
+			_ = a.tasks.SetStatus(ctx, taskID, background.StatusResolved)
+			_ = a.tasks.SetRepair(ctx, taskID, "verified", "cluster recovered")
+			_ = a.tasks.Timeline(ctx, taskID, "workflow_completed", "success", "cluster recovered")
+			return nil
+		}
+		if round < maxRounds {
+			_ = a.tasks.Timeline(ctx, taskID, "replan_started", "success", fmt.Sprintf("round %d did not recover", round))
+			continue
+		}
+		return a.createIncident(ctx, task, evidence, decision, plan, "maximum replanning rounds reached")
+	}
+	return nil
+}
+
+type Observation struct {
+	PodsHealthy       bool     `json:"pods_healthy"`
+	DeploymentHealthy bool     `json:"deployment_healthy"`
+	AlertRecovered    bool     `json:"alert_recovered"`
+	ReplacementPod    string   `json:"replacement_pod,omitempty"`
+	Errors            []string `json:"errors,omitempty"`
+}
+
+func (a *Agent) observe(ctx context.Context, t background.Task, p ActionPlan) Observation {
+	o := Observation{}
+	if a.kube == nil {
+		return o
+	}
+	pods, err := a.kube.ListPods(ctx, t.Namespace)
+	if err != nil {
+		o.Errors = []string{err.Error()}
+		return o
+	}
+	o.PodsHealthy = true
+	for _, pod := range pods {
+		if !pod.Ready {
+			o.PodsHealthy = false
+		}
+		if pod.Name != p.Pod && pod.Ready {
+			o.ReplacementPod = pod.Name
+		}
+	}
+	deps, err := a.kube.ListDeployments(ctx, t.Namespace)
+	if err == nil {
+		o.DeploymentHealthy = true
+		for _, d := range deps {
+			if !d.Ready {
+				o.DeploymentHealthy = false
+			}
+		}
+	}
+	return o
 }
 func (a *Agent) collect(ctx context.Context, t background.Task) Evidence {
 	e := Evidence{Alert: background.Alert{Fingerprint: t.Fingerprint, Name: t.AlertName, Namespace: t.Namespace}, Logs: map[string]string{}}
@@ -164,42 +246,6 @@ func (a *Agent) evaluate(ctx context.Context, t background.Task, d Decision, e E
 		return deny("target is not a managed ReplicaSet pod")
 	}
 	return ActionPlan{Allowed: true, Action: "delete_managed_pod", Pod: d.TargetPod, Reason: d.Reason}
-}
-func (a *Agent) executeAndVerify(ctx context.Context, t background.Task, p ActionPlan, e Evidence, d Decision) error {
-	_ = a.tasks.SetStatus(ctx, t.ID, background.StatusAutoRepairPending)
-	_ = a.tasks.SetRepair(ctx, t.ID, "pending", "")
-	actions := a.kube.(kuberepo.PodActions)
-	_ = a.tasks.SetStatus(ctx, t.ID, background.StatusAutoRepairing)
-	if err := actions.DeleteManagedPod(ctx, t.Namespace, p.Pod); err != nil {
-		_ = a.tasks.SetRepair(ctx, t.ID, "failed", err.Error())
-		return a.createIncident(ctx, t, e, d, p, err.Error())
-	}
-	_ = a.tasks.SetRepair(ctx, t.ID, "completed", "system deleted managed Pod "+p.Pod)
-	_ = a.tasks.SetStatus(ctx, t.ID, background.StatusWaitingVerification)
-	_ = a.tasks.Timeline(ctx, t.ID, "repair_completed", "success", p.Pod)
-	for i := 0; i < 3; i++ {
-		select {
-		case <-ctx.Done():
-			break
-		case <-time.After(5 * time.Second):
-		}
-		pods, err := a.kube.ListPods(ctx, t.Namespace)
-		if err == nil {
-			healthy := true
-			for _, pod := range pods {
-				if !pod.Ready {
-					healthy = false
-				}
-			}
-			if healthy {
-				_ = a.tasks.SetStatus(ctx, t.ID, background.StatusResolved)
-				_ = a.tasks.SetRepair(ctx, t.ID, "verified", "cluster recovered")
-				_ = a.tasks.Timeline(ctx, t.ID, "verification_completed", "success", "cluster recovered")
-				return nil
-			}
-		}
-	}
-	return a.createIncident(ctx, t, e, d, p, "recovery verification failed")
 }
 func (a *Agent) createIncident(ctx context.Context, t background.Task, e Evidence, d Decision, p ActionPlan, reason string) error {
 	snapshot := map[string]any{"background_task_id": t.ID, "alert": e.Alert, "evidence": e, "remediation_decision": d, "policy_result": p, "repair_result": reason}

@@ -36,7 +36,7 @@ func Open(path string) (*DB, error) {
 }
 
 func migrate(db *sql.DB) error {
-	_, err := db.Exec(`CREATE TABLE IF NOT EXISTS background_tasks (id TEXT PRIMARY KEY, alert_fingerprint TEXT NOT NULL, alert_name TEXT, namespace TEXT, alert_severity TEXT, status TEXT NOT NULL, target_pod TEXT, analysis TEXT, proposed_action TEXT, severity TEXT DEFAULT 'unknown', severity_reason TEXT, repair_status TEXT, repair_result TEXT, evidence_snapshot TEXT, incident_id TEXT, retry_count INTEGER DEFAULT 0, cooldown_until TEXT, last_verified_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, completed_at TEXT);
+	_, err := db.Exec(`CREATE TABLE IF NOT EXISTS background_tasks (id TEXT PRIMARY KEY, alert_fingerprint TEXT NOT NULL, alert_name TEXT, namespace TEXT, alert_severity TEXT, status TEXT NOT NULL, target_pod TEXT, analysis TEXT, proposed_action TEXT, severity TEXT DEFAULT 'unknown', severity_reason TEXT, repair_status TEXT, repair_result TEXT, evidence_snapshot TEXT, incident_id TEXT, current_round INTEGER DEFAULT 0, max_rounds INTEGER DEFAULT 3, decision_snapshot TEXT, plan_snapshot TEXT, observation_snapshot TEXT, last_action_at TEXT, lock_key TEXT, retry_count INTEGER DEFAULT 0, cooldown_until TEXT, last_verified_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, completed_at TEXT);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_background_fingerprint_active ON background_tasks(alert_fingerprint) WHERE status NOT IN ('resolved','failed','cancelled');
 CREATE TABLE IF NOT EXISTS incidents (id TEXT PRIMARY KEY, alert_fingerprint TEXT, alert_name TEXT, status TEXT NOT NULL, context_snapshot TEXT, source TEXT DEFAULT 'manual', background_task_id TEXT, severity TEXT, last_context_refresh_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, resolved_at TEXT);
 CREATE TABLE IF NOT EXISTS work_orders (id TEXT PRIMARY KEY, type TEXT NOT NULL, title TEXT NOT NULL, namespace TEXT, target TEXT, parameters TEXT, status TEXT NOT NULL, description TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, completed_at TEXT);
@@ -50,7 +50,7 @@ CREATE TABLE IF NOT EXISTS approvals (id TEXT PRIMARY KEY, task_id TEXT NOT NULL
 	// Add fields introduced by the background/incident workflow to databases
 	// created by earlier AutoOps versions.
 	for table, columns := range map[string][]string{
-		"background_tasks": {"alert_severity TEXT", "severity TEXT DEFAULT 'unknown'", "severity_reason TEXT", "repair_status TEXT", "repair_result TEXT", "evidence_snapshot TEXT", "incident_id TEXT", "retry_count INTEGER DEFAULT 0", "cooldown_until TEXT", "last_verified_at TEXT"},
+		"background_tasks": {"alert_severity TEXT", "severity TEXT DEFAULT 'unknown'", "severity_reason TEXT", "repair_status TEXT", "repair_result TEXT", "evidence_snapshot TEXT", "incident_id TEXT", "current_round INTEGER DEFAULT 0", "max_rounds INTEGER DEFAULT 3", "decision_snapshot TEXT", "plan_snapshot TEXT", "observation_snapshot TEXT", "last_action_at TEXT", "lock_key TEXT", "retry_count INTEGER DEFAULT 0", "cooldown_until TEXT", "last_verified_at TEXT"},
 		"incidents":        {"source TEXT DEFAULT 'manual'", "background_task_id TEXT", "severity TEXT", "last_context_refresh_at TEXT"},
 	} {
 		for _, column := range columns {
