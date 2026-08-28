@@ -138,13 +138,26 @@ type scanner interface{ Scan(...any) error }
 
 func scanTask(row scanner) (Task, error) {
 	var t Task
-	var created, updated, sev string
+	var created, updated sql.NullString
+	var fingerprint, alertName, namespace, status sql.NullString
+	var alertSeverity, targetPod, analysis, sev, severityReason, repairStatus, repairResult, incidentID sql.NullString
 	var action sql.NullString
-	err := row.Scan(&t.ID, &t.Fingerprint, &t.AlertName, &t.Namespace, &t.AlertSeverity, &t.Status, &t.TargetPod, &t.Analysis, &action, &sev, &t.SeverityReason, &t.RepairStatus, &t.RepairResult, &t.IncidentID, &created, &updated)
-	t.Severity = Severity(sev)
+	err := row.Scan(&t.ID, &fingerprint, &alertName, &namespace, &alertSeverity, &status, &targetPod, &analysis, &action, &sev, &severityReason, &repairStatus, &repairResult, &incidentID, &created, &updated)
+	t.Fingerprint = fingerprint.String
+	t.AlertName = alertName.String
+	t.Namespace = namespace.String
+	t.Status = status.String
+	t.AlertSeverity = alertSeverity.String
+	t.TargetPod = targetPod.String
+	t.Analysis = analysis.String
+	t.Severity = Severity(sev.String)
+	t.SeverityReason = severityReason.String
+	t.RepairStatus = repairStatus.String
+	t.RepairResult = repairResult.String
+	t.IncidentID = incidentID.String
 	t.ProposedAction = json.RawMessage(action.String)
-	t.CreatedAt, _ = time.Parse(time.RFC3339Nano, created)
-	t.UpdatedAt, _ = time.Parse(time.RFC3339Nano, updated)
+	t.CreatedAt, _ = time.Parse(time.RFC3339Nano, created.String)
+	t.UpdatedAt, _ = time.Parse(time.RFC3339Nano, updated.String)
 	return t, err
 }
 func (s *Service) Approve(ctx context.Context, id, by string) (Task, error) {

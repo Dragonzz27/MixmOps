@@ -27,6 +27,7 @@ import (
 )
 
 func InitRouter(ctx context.Context, r *gin.Engine, loger *logrus.Logger, config *config.Config, runner compose.Runnable[document.Source, bool], incidentRunner compose.Runnable[*shared.UserMessage, *schema.Message], workOrderRunner compose.Runnable[*shared.UserMessage, *schema.Message], kube kuberepo.KubernetesRepository, docIndexer indexer.QdranIndexerServer, database *sqlite.DB) {
+	const maintenanceDocumentRoot = "../maintenance-documents"
 	//cors
 	corsConfig := cors.DefaultConfig()
 	corsConfig.AllowOrigins = []string{"*"}
@@ -40,7 +41,7 @@ func InitRouter(ctx context.Context, r *gin.Engine, loger *logrus.Logger, config
 	})
 	//文件上传
 	uploder := knowledgeindex.NewFileUploaderServer(loger, runner)
-	uploderHandler := handler.NewFileUploader("./docs/", uploder)
+	uploderHandler := handler.NewFileUploader(maintenanceDocumentRoot+"/", uploder)
 	r.POST("/upload", uploderHandler.Upload())
 	observability := handler.NewObservabilityHandler(config, kube)
 	r.GET("/cluster/summary", observability.Summary())
@@ -48,10 +49,10 @@ func InitRouter(ctx context.Context, r *gin.Engine, loger *logrus.Logger, config
 	r.GET("/cluster/deployments", observability.Deployments())
 	r.GET("/cluster/events", observability.Events())
 	r.GET("/cluster/pods/:pod/logs", observability.Logs())
-	documents := handler.NewDocumentHandler("./docs", docIndexer)
+	documents := handler.NewDocumentHandler(maintenanceDocumentRoot, docIndexer)
 	r.GET("/knowledge/documents", documents.List())
 	r.DELETE("/knowledge/documents/:name", documents.Delete())
-	maintenance := maintenancedocument.NewService("./docs", runner, docIndexer, loger)
+	maintenance := maintenancedocument.NewService(maintenanceDocumentRoot, runner, docIndexer, loger)
 	maintenanceHandler := handler.NewMaintenanceDocumentHandler(maintenance)
 	r.GET("/maintenance-documents", maintenanceHandler.List())
 	r.GET("/maintenance-documents/:name", maintenanceHandler.Get())
