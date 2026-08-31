@@ -28,6 +28,36 @@ type PodActions interface {
 	IsManagedPod(context.Context, string, string) (bool, error)
 }
 
+type ConditionInfo struct {
+	Type    string `json:"type"`
+	Status  string `json:"status"`
+	Reason  string `json:"reason,omitempty"`
+	Message string `json:"message,omitempty"`
+}
+type RevisionInfo struct {
+	Revision  int64  `json:"revision"`
+	Image     string `json:"image,omitempty"`
+	CreatedAt string `json:"created_at,omitempty"`
+}
+type OwnerInfo struct {
+	Kind string `json:"kind"`
+	Name string `json:"name"`
+	UID  string `json:"uid,omitempty"`
+}
+type KubernetesObservationRepository interface {
+	GetDeploymentYAML(context.Context, string, string) ([]byte, error)
+	GetPodYAML(context.Context, string, string) ([]byte, error)
+	GetDeploymentConditions(context.Context, string, string) ([]ConditionInfo, error)
+	ListRolloutRevisions(context.Context, string, string) ([]RevisionInfo, error)
+	GetPodOwner(context.Context, string, string) (OwnerInfo, error)
+}
+type IncidentActions interface {
+	DeleteManagedPod(context.Context, string, string) error
+	RolloutRestartDeployment(context.Context, string, string) error
+	RollbackDeployment(context.Context, string, string, int64) error
+	ScaleDeployment(context.Context, string, string, int32) error
+}
+
 type repository struct{ client kubernetes.Interface }
 
 func NewRepository(cfg config.KubernetesConfig) (KubernetesRepository, error) {

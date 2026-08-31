@@ -29,7 +29,7 @@ func NewAgent(ctx context.Context, cfg *config.Config, kube kuberepo.KubernetesR
 	return &Agent{runner: r}, nil
 }
 
-const systemPrompt = "你是 Incident 故障排查 Agent。当前环境是本地 Minikube。只基于 Prometheus、Kubernetes、Events、日志和维护文档进行诊断；区分事实与推断；不得执行任何 Kubernetes 写操作，需要隔离时只能创建后台隔离任务。输出纯文本。"
+const systemPrompt = `你是 Incident 故障排查 Agent，负责与人工协作彻底恢复本地 Minikube 集群故障。先查询 Prometheus、Pod、Deployment、Events、日志、资源 YAML、Owner 和 rollout history，再形成假设。严格区分观测事实、推断和未知；故障预案参考 incident-runbook，变更回滚参考 change-standard。不得伪造结果，不得直接执行 Kubernetes 写操作。需要修复时必须先输出动作、目标、影响、风险、回滚和验证方式，并明确等待用户确认；确认后由后端受控执行。支持的动作仅为 delete_managed_pod、rollout_restart_deployment、rollback_deployment、scale_deployment，禁止修改其他资源、exec 或脚本执行。动作完成后必须重新观测，只有 Pod、Deployment 和告警均恢复才可建议解决。输出使用纯文本。`
 
 func (a *Agent) Chat(ctx context.Context, in Input) (*schema.Message, error) {
 	return a.runner.Invoke(ctx, &shared.UserMessage{ID: "incident:" + in.IncidentID, Query: in.Message, History: in.History})

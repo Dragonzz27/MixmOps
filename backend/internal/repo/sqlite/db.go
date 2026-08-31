@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS incidents (id TEXT PRIMARY KEY, alert_fingerprint TEX
 CREATE TABLE IF NOT EXISTS work_orders (id TEXT PRIMARY KEY, type TEXT NOT NULL, title TEXT NOT NULL, namespace TEXT, target TEXT, parameters TEXT, status TEXT NOT NULL, description TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, completed_at TEXT);
 CREATE TABLE IF NOT EXISTS agent_messages (id TEXT PRIMARY KEY, owner_type TEXT NOT NULL, owner_id TEXT NOT NULL, role TEXT NOT NULL, content TEXT NOT NULL, metadata TEXT, created_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS agent_timeline (id TEXT PRIMARY KEY, owner_type TEXT NOT NULL, owner_id TEXT NOT NULL, event_type TEXT NOT NULL, event_name TEXT, status TEXT NOT NULL, input TEXT, output TEXT, error TEXT, created_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS incident_actions (id TEXT PRIMARY KEY, incident_id TEXT NOT NULL, action_type TEXT NOT NULL, namespace TEXT, target TEXT, payload TEXT, reason TEXT, risk TEXT, rollback TEXT, verification TEXT, status TEXT NOT NULL, proposed_by TEXT, confirmed_by TEXT, created_at TEXT NOT NULL, confirmed_at TEXT, executed_at TEXT, result TEXT, error TEXT);
 
 CREATE TABLE IF NOT EXISTS approvals (id TEXT PRIMARY KEY, task_id TEXT NOT NULL, action_type TEXT NOT NULL, action_payload TEXT NOT NULL, status TEXT NOT NULL, approved_by TEXT, reason TEXT, created_at TEXT NOT NULL, resolved_at TEXT);`)
 	if err != nil {

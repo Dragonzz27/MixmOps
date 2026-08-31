@@ -39,6 +39,23 @@ type Message struct {
 	Content   string    `json:"content"`
 	CreatedAt time.Time `json:"created_at"`
 }
+type IncidentAction struct {
+	ID           string          `json:"id"`
+	IncidentID   string          `json:"incident_id"`
+	ActionType   string          `json:"action_type"`
+	Namespace    string          `json:"namespace"`
+	Target       string          `json:"target"`
+	Payload      json.RawMessage `json:"payload"`
+	Reason       string          `json:"reason"`
+	Risk         string          `json:"risk"`
+	Rollback     string          `json:"rollback"`
+	Verification string          `json:"verification"`
+	Status       string          `json:"status"`
+	ConfirmedBy  string          `json:"confirmed_by,omitempty"`
+	Result       string          `json:"result,omitempty"`
+	Error        string          `json:"error,omitempty"`
+	CreatedAt    time.Time       `json:"created_at"`
+}
 type Service struct{ db *sql.DB }
 
 func NewService(db *sql.DB) *Service { return &Service{db: db} }
@@ -156,6 +173,71 @@ func (s *Service) ResolveIncident(ctx context.Context, id string) error {
 		return sql.ErrNoRows
 	}
 	return nil
+}
+
+var validIncidentActions = map[string]bool{"delete_managed_pod": true, "rollout_restart_deployment": true, "rollback_deployment": true, "scale_deployment": true}
+
+func (s *Service) ProposeIncidentAction(ctx context.Context, incidentID string, a IncidentAction) (IncidentAction, error) {
+	if !validIncidentActions[a.ActionType] {
+		return a, fmt.Errorf("unsupported incident action %q", a.ActionType)
+	}
+	if a.Namespace != "autoops-test" {
+		return a, fmt.Errorf("namespace outside policy")
+	}
+	a.ID = uuid.New().String()
+	a.IncidentID = incidentID
+	a.Status = "pending_confirmation"
+	a.CreatedAt = time.Now().UTC()
+	if len(a.Payload) == 0 {
+		a.Payload = json.RawMessage(`{}`)
+	}
+	_, err := s.db.ExecContext(ctx, `INSERT INTO incident_actions(id,incident_id,action_type,namespace,target,payload,reason,risk,rollback,verification,status,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`, a.ID, a.IncidentID, a.ActionType, a.Namespace, a.Target, string(a.Payload), a.Reason, a.Risk, a.Rollback, a.Verification, a.Status, a.CreatedAt.Format(time.RFC3339Nano))
+	return a, err
+}
+func (s *Service) GetIncidentAction(ctx context.Context, id string) (IncidentAction, error) {
+	var a IncidentAction
+	var payload, created string
+	err := s.db.QueryRowContext(ctx, `SELECT id,incident_id,action_type,namespace,target,payload,reason,risk,rollback,verification,status,confirmed_by,result,error,created_at FROM incident_actions WHERE id=?`, id).Scan(&a.ID, &a.IncidentID, &a.ActionType, &a.Namespace, &a.Target, &payload, &a.Reason, &a.Risk, &a.Rollback, &a.Verification, &a.Status, &a.ConfirmedBy, &a.Result, &a.Error, &created)
+	a.Payload = json.RawMessage(payload)
+	a.CreatedAt, _ = time.Parse(time.RFC3339Nano, created)
+	return a, err
+}
+func (s *Service) ConfirmIncidentAction(ctx context.Context, id, by string) (IncidentAction, error) {
+	_, err := s.db.ExecContext(ctx, `UPDATE incident_actions SET status='confirmed',confirmed_by=?,confirmed_at=? WHERE id=? AND status='pending_confirmation'`, by, time.Now().UTC().Format(time.RFC3339Nano), id)
+	if err != nil {
+		return IncidentAction{}, err
+	}
+	return s.GetIncidentAction(ctx, id)
+}
+func (s *Service) RejectIncidentAction(ctx context.Context, id, by string) (IncidentAction, error) {
+	_, err := s.db.ExecContext(ctx, `UPDATE incident_actions SET status='rejected',confirmed_by=?,confirmed_at=? WHERE id=? AND status='pending_confirmation'`, by, time.Now().UTC().Format(time.RFC3339Nano), id)
+	if err != nil {
+		return IncidentAction{}, err
+	}
+	return s.GetIncidentAction(ctx, id)
+}
+func (s *Service) SetIncidentActionResult(ctx context.Context, id, status, result, actionErr string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE incident_actions SET status=?,result=?,error=?,executed_at=? WHERE id=? AND status IN ('confirmed','executing')`, status, result, actionErr, time.Now().UTC().Format(time.RFC3339Nano), id)
+	return err
+}
+func (s *Service) ListIncidentActions(ctx context.Context, incidentID string) ([]IncidentAction, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id,incident_id,action_type,namespace,target,payload,reason,risk,rollback,verification,status,confirmed_by,result,error,created_at FROM incident_actions WHERE incident_id=? ORDER BY created_at`, incidentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []IncidentAction{}
+	for rows.Next() {
+		var a IncidentAction
+		var payload, created string
+		if err := rows.Scan(&a.ID, &a.IncidentID, &a.ActionType, &a.Namespace, &a.Target, &payload, &a.Reason, &a.Risk, &a.Rollback, &a.Verification, &a.Status, &a.ConfirmedBy, &a.Result, &a.Error, &created); err != nil {
+			return nil, err
+		}
+		a.Payload = json.RawMessage(payload)
+		a.CreatedAt, _ = time.Parse(time.RFC3339Nano, created)
+		out = append(out, a)
+	}
+	return out, rows.Err()
 }
 func (s *Service) SetWorkOrderStatus(ctx context.Context, id, status string) error {
 	allowed := map[string]bool{"completed": true, "cancelled": true}

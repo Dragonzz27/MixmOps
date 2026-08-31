@@ -41,6 +41,18 @@ func BuildScopedAgent(ctx context.Context, cfg *config.Config, kube kuberepo.Kub
 			return nil, e
 		}
 		all = append(all, alerts, metrics)
+		if kube != nil {
+			extra, e := tools.NewIncidentObservationTools(kube, cfg.Kubernetes.Namespace)
+			if e != nil {
+				return nil, e
+			}
+			all = append(all, extra...)
+		}
+		actionTool, e := tools.NewIncidentActionProposalTool(cfg.Kubernetes.Namespace)
+		if e != nil {
+			return nil, e
+		}
+		all = append(all, actionTool)
 	} else if mode == "workorder" {
 		gens, e := tools.NewGenerationTools()
 		if e != nil {
