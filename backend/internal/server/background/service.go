@@ -241,11 +241,11 @@ func (s *Service) TimelineList(ctx context.Context, id string) ([]map[string]any
 	defer rows.Close()
 	out := []map[string]any{}
 	for rows.Next() {
-		var typ, name, status, output, e, created string
+		var typ, name, status, output, e, created sql.NullString
 		if err := rows.Scan(&typ, &name, &status, &output, &e, &created); err != nil {
 			return nil, err
 		}
-		out = append(out, map[string]any{"event_type": typ, "event_name": name, "status": status, "output": output, "error": e, "created_at": created})
+		out = append(out, map[string]any{"event_type": typ.String, "event_name": name.String, "status": status.String, "output": output.String, "error": e.String, "created_at": created.String})
 	}
 	return out, rows.Err()
 }

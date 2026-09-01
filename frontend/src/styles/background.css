@@ -1,0 +1,24 @@
+.background-detail-grid{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(280px,1fr);gap:20px}
+.background-metrics{grid-template-columns:repeat(4,1fr)}
+.back-link{border:0;background:none;color:#138347;cursor:pointer;font:inherit;margin-bottom:10px}
+.round-progress{display:flex;justify-content:space-between;gap:20px;align-items:center;padding:14px 16px;border-radius:10px;background:#f1f8f3;color:#255c3f;margin-bottom:20px}
+.round-progress span{font-size:12px;color:#718078}
+.workflow-steps{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.workflow-step{display:flex;gap:8px;align-items:flex-start;padding:12px 8px;color:#819088;border-top:3px solid #dce8e0}
+.workflow-step.active{color:#138347;border-color:#18a058;background:#f7fcf8}
+.workflow-step.completed{color:#3d6d53;border-color:#8bd0a5}
+.step-index{width:23px;height:23px;border-radius:50%;display:grid;place-items:center;background:#e8efea;font-size:11px;font-weight:700;flex:none}
+.workflow-step.active .step-index{background:#18a058;color:#fff}
+.workflow-step.completed .step-index{background:#ccefd8;color:#137542}
+.workflow-step small{display:block;font-size:11px;line-height:1.4;margin-top:5px;color:#8a9991}
+.snapshot-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.snapshot-card{min-width:0;border:1px solid #e1ebe5;border-radius:10px;padding:14px;background:#fbfdfc}
+.snapshot-title{font-weight:700;font-size:13px}
+.snapshot-meta{font-size:12px;color:#718078;margin:10px 0}
+.snapshot-card pre{max-height:260px;overflow:auto;background:#14221d;color:#cfe9db;border-radius:8px;padding:12px;font:11px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap}
+.timeline-status{font-size:12px;color:#718078;margin-bottom:5px}
+.timeline-output{max-height:180px;overflow:auto;white-space:pre-wrap;background:#f3f7f4;border-radius:7px;padding:10px;font:11px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace}
+.evidence-window{max-height:420px}
+.handoff-card p{font-size:13px;line-height:1.7;color:#718078;margin-bottom:15px}
+@media(max-width:1000px){.background-detail-grid{grid-template-columns:1fr}.workflow-steps{grid-template-columns:repeat(3,1fr)}.snapshot-grid{grid-template-columns:1fr}}
+@media(max-width:700px){.background-metrics{grid-template-columns:repeat(2,1fr)}.round-progress{display:block}.round-progress span{display:block;margin-top:6px}.workflow-steps{grid-template-columns:1fr 1fr}}
