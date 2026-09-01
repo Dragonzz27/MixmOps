@@ -14,25 +14,16 @@ import (
 )
 
 const (
-	OwnerIncident  = "incident"
-	OwnerWorkOrder = "work_order"
+	OwnerIncident = "incident"
 )
 
 type Service struct {
-	cases           *cases.Service
-	incidentRunner  compose.Runnable[*shared.UserMessage, *schema.Message]
-	workOrderRunner compose.Runnable[*shared.UserMessage, *schema.Message]
+	cases          *cases.Service
+	incidentRunner compose.Runnable[*shared.UserMessage, *schema.Message]
 }
 
-func NewService(cs *cases.Service, runners ...compose.Runnable[*shared.UserMessage, *schema.Message]) *Service {
-	s := &Service{cases: cs}
-	if len(runners) > 0 {
-		s.incidentRunner = runners[0]
-	}
-	if len(runners) > 1 {
-		s.workOrderRunner = runners[1]
-	}
-	return s
+func NewService(cs *cases.Service, incidentRunner compose.Runnable[*shared.UserMessage, *schema.Message]) *Service {
+	return &Service{cases: cs, incidentRunner: incidentRunner}
 }
 func (s *Service) History(ctx context.Context, owner, id string) ([]cases.Message, error) {
 	if !validOwner(owner) {
@@ -45,14 +36,10 @@ func (s *Service) Chat(ctx context.Context, owner, id, message string) (string, 
 	if err != nil {
 		return "", err
 	}
-	runner := s.incidentRunner
-	if owner == OwnerWorkOrder {
-		runner = s.workOrderRunner
-	}
-	if runner == nil {
+	if s.incidentRunner == nil {
 		return "", fmt.Errorf("agent for %s is unavailable", owner)
 	}
-	out, err := runner.Invoke(ctx, &shared.UserMessage{ID: owner + ":" + id, Query: query, History: history})
+	out, err := s.incidentRunner.Invoke(ctx, &shared.UserMessage{ID: owner + ":" + id, Query: query, History: history})
 	if err != nil {
 		return "", err
 	}
@@ -66,14 +53,10 @@ func (s *Service) Stream(ctx context.Context, owner, id, message string, output 
 	if err != nil {
 		return err
 	}
-	runner := s.incidentRunner
-	if owner == OwnerWorkOrder {
-		runner = s.workOrderRunner
-	}
-	if runner == nil {
+	if s.incidentRunner == nil {
 		return fmt.Errorf("agent for %s is unavailable", owner)
 	}
-	stream, err := runner.Stream(ctx, &shared.UserMessage{ID: owner + ":" + id, Query: query, History: history})
+	stream, err := s.incidentRunner.Stream(ctx, &shared.UserMessage{ID: owner + ":" + id, Query: query, History: history})
 	if err != nil {
 		return err
 	}
@@ -125,13 +108,6 @@ func (s *Service) context(ctx context.Context, owner, id string) (string, error)
 			return "", err
 		}
 		return "你是故障排查 Agent。只进行只读诊断，不执行 Kubernetes 写操作。以下是 Incident 上下文：\n" + string(i.Context), nil
-	case OwnerWorkOrder:
-		w, err := s.cases.GetWorkOrder(ctx, id)
-		if err != nil {
-			return "", err
-		}
-		b := fmt.Sprintf("类型=%s 标题=%s Namespace=%s 目标=%s 参数=%s 描述=%s", w.Type, w.Title, w.Namespace, w.Target, string(w.Parameters), w.Description)
-		return "你是日常运维工单 Agent。生成计划、配置、YAML、Shell、风险、回滚和验证命令，但不得执行部署或写操作。工单上下文：\n" + b, nil
 	default:
 		return "", fmt.Errorf("invalid conversation owner")
 	}
@@ -142,4 +118,4 @@ func (s *Service) persist(ctx context.Context, owner, id, user, assistant string
 	}
 	return s.cases.AddMessage(ctx, owner, id, "assistant", assistant)
 }
-func validOwner(owner string) bool { return owner == OwnerIncident || owner == OwnerWorkOrder }
+func validOwner(owner string) bool { return owner == OwnerIncident }

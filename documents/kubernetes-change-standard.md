@@ -17,7 +17,7 @@ tags:
 - 执行前记录当前状态和配置。
 - 执行前提供验证命令和回滚方案。
 - 禁止使用未解析变量、宽泛通配符或全 namespace 批量写操作。
-- Incident Agent 和 Work Order Agent 只能生成建议，不直接执行变更。
+- Incident Agent 只能通过受控动作提案和人工确认执行变更。
 
 ## 变更前检查
 
@@ -69,4 +69,3 @@ kubectl -n autoops-test rollout status deployment/<name>
 - Prometheus 没有新增 firing 告警；
 - AutoOps 后台任务和 Incident 状态已核对；
 - 变更内容、结果和回滚点已记录。
-

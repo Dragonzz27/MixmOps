@@ -4,7 +4,7 @@
 
 ## 项目简介
 
-AutoOps 面向本地 Minikube 测试集群，提供三个相互隔离的业务 Agent：
+AutoOps 面向本地 Minikube 测试集群，提供两个相互隔离的业务 Agent，并共享 RAG 知识能力：
 
 - **RAG (检索增强生成)** - 基于向量数据库的知识检索，将内部运维文档、告警处理手册转化为可检索的知识库，为 Agent 提供领域知识支撑
 
@@ -12,13 +12,12 @@ AutoOps 面向本地 Minikube 测试集群，提供三个相互隔离的业务 A
 
 - **Background Remediation** - 后台以 Plan-Execute-Replan 处理低风险告警，失败或严重故障自动接力 Incident
 
-三类 Agent 共享统一 Runtime、工具注册和审计时间线，但 Prompt、会话、权限和上下文完全隔离。任何 Kubernetes 写操作都必须经过 Proposal、Policy、用户确认、Executor 和 Verifier。
+两类 Agent 共享统一 Runtime、工具注册和审计时间线，但 Prompt、会话、权限和上下文完全隔离。任何 Kubernetes 写操作都必须经过 Proposal、Policy、用户确认、Executor 和 Verifier。
 
 ## 功能特性
 
 - **故障排查** - Incident Coordinator 与 Kubernetes、Prometheus、日志、维护文档专家协作，并与人工多轮对话
 - **后台自动处置** - Supervisor 监听告警，Remediation Agent 以 Plan-Execute-Replan 低风险修复，失败自动创建 Incident
-- **日常运维工单** - Work Order Agent 生成部署计划、YAML、Shell、风险和回滚步骤，不自动执行
 - **维护文档 / RAG** - Markdown 文档自动解析、向量化与类型化检索
 
 ## 技术架构
@@ -34,7 +33,6 @@ AutoOps 面向本地 Minikube 测试集群，提供三个相互隔离的业务 A
 │  Agent Runtime (CloudWeGo Eino)                             │
 │  ├── Incident Coordinator + read-only Specialists            │
 │  ├── Background Remediation Plan-Execute-Replan              │
-│  └── Work Order Agent                                         │
 ├─────────────────────────────────────────────────────────────┤
 │  Tools                                                      │
 │  ├── Observation / Knowledge / Proposal tools                 │
@@ -104,7 +102,7 @@ npm install
 npm run dev
 ```
 
-前端默认运行在 `http://localhost:5173`，Vite 会将 `/api` 请求代理到后端 `http://localhost:8819`。工作台包含后台任务、故障排查、日常工单、Minikube 集群观测和维护文档页面。
+前端默认运行在 `http://localhost:5173`，Vite 会将 `/api` 请求代理到后端 `http://localhost:8819`。工作台包含后台任务、故障排查、Minikube 集群观测和维护文档页面。
 
 ### 推荐：使用 Minikube 模拟运维集群
 
@@ -207,22 +205,6 @@ data: 根据 Prometheus 查询结果...
 data: [DONE]
 ```
 
-### 运维计划分析
-
-```http
-POST /work-orders/:id/chatStream
-```
-
-自动获取 Prometheus 活跃告警，检索内部知识库，生成分析报告。
-
-**响应:**
-```json
-{
-  "message": "分析结果...",
-  "details": ["步骤1...", "步骤2..."]
-}
-```
-
 ## 项目结构
 
 ```
@@ -246,14 +228,14 @@ AutoOps/
 │   │       └── retriever/
 │   └── server/                 # 业务逻辑层
 │       ├── ai/
-│       │   ├── agent/{incident,workorder,background,knowledge_index}
+│       │   ├── agent/{incident,background,knowledge_index}
 │       │   ├── runtime/        # Persona、工具权限和运行时
 │       │   ├── embeder/        # Embedding 服务
-│       │   └── tools/           # 观测、RAG、生成和动作提案工具
+│       │   └── tools/           # 观测、RAG 和动作提案工具
 │       ├── background/          # Supervisor + Remediation 工作流
 │       ├── incident/action/     # Proposal/Policy/Executor/Verifier
 │       ├── operations/          # SQLite 持久化协调与锁
-│       └── cases/               # Incident、工单、消息和时间线
+│       └── cases/               # Incident、消息和时间线
 │   ├── pkg/                    # 配置、日志和通用工具
 │   ├── scripts/                # 后端辅助脚本
 │   ├── tests/prometheus-test-server/ # Prometheus 测试服务器

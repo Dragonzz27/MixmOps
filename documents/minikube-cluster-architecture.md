@@ -90,9 +90,8 @@ autoops-test-server /metrics
 
 ## 安全边界
 
-- Incident Agent 和 Work Order Agent 只拥有 Kubernetes 只读工具。
+- Incident Agent 和 Background Remediation Agent 使用隔离的 Kubernetes 工具权限。
 - Background Remediation Agent 只能提出修复建议。
 - Policy 层是自动修复的最终准入点。
 - 首版唯一允许的自动动作是删除由 ReplicaSet/Deployment 管理的异常 Pod。
 - 禁止自动删除 Deployment、Service、Node，禁止扩缩容、Patch、Update 和 `kubectl exec`。
-

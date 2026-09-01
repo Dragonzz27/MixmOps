@@ -64,13 +64,6 @@ func BuildScopedAgent(ctx context.Context, cfg *config.Config, kube kuberepo.Kub
 			return nil, e
 		}
 		registered = append(registered, proposal)
-	case "workorder":
-		addBase(true)
-		generation, e := tools.NewGenerationTools()
-		if e != nil {
-			return nil, e
-		}
-		registered = append(registered, generation...)
 	case "background":
 		addBase(true)
 		alerts, e := tools.NewPrometheusAlertsTool(cfg.GetPrometheusURL())
@@ -100,7 +93,7 @@ func BuildScopedAgent(ctx context.Context, cfg *config.Config, kube kuberepo.Kub
 	default:
 		return nil, fmt.Errorf("unknown agent scope %q", mode)
 	}
-	if kube != nil && (mode == "incident" || mode == "workorder" || mode == "background" || mode == "specialist-kubernetes" || mode == "specialist-logs") {
+	if kube != nil && (mode == "incident" || mode == "background" || mode == "specialist-kubernetes" || mode == "specialist-logs") {
 		clusterTools, e := tools.NewKubernetesTools(kube, cfg.Kubernetes.Namespace)
 		if e != nil {
 			return nil, e
@@ -151,7 +144,7 @@ func BuildScopedAgent(ctx context.Context, cfg *config.Config, kube kuberepo.Kub
 
 func applyPersonaToolPolicy(ctx context.Context, mode string, candidates []tool.BaseTool) ([]tool.BaseTool, error) {
 	persona := map[string]string{
-		"incident": "incident-coordinator", "workorder": "work-order", "background": "background-remediation",
+		"incident": "incident-coordinator", "background": "background-remediation",
 		"specialist-kubernetes": "specialist-kubernetes", "specialist-observability": "specialist-observability",
 		"specialist-logs": "specialist-logs", "specialist-runbook": "specialist-runbook",
 	}[mode]

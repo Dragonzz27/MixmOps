@@ -9,7 +9,6 @@ import (
 	"AutoOps/internal/router"
 	incidentagent "AutoOps/internal/server/ai/agent/incident"
 	knowledgeindex "AutoOps/internal/server/ai/agent/knowledge_index"
-	workorderagent "AutoOps/internal/server/ai/agent/workorder"
 	"AutoOps/internal/server/ai/embeder"
 	aitools "AutoOps/internal/server/ai/tools"
 	"AutoOps/pkg/config"
@@ -61,12 +60,8 @@ func main() {
 		panic(err)
 	}
 	aitools.InitRAGTool(run)
-	// 初始化两个相互隔离的业务 Agent
+	// 初始化 Incident 故障排查 Agent
 	incident, err := incidentagent.NewAgent(ctx, config, kubernetes)
-	if err != nil {
-		panic(err)
-	}
-	workorder, err := workorderagent.NewAgent(ctx, config, kubernetes)
 	if err != nil {
 		panic(err)
 	}
@@ -84,7 +79,7 @@ func main() {
 	}
 	// 初始化gin
 	r := gin.Default()
-	router.InitRouter(ctx, r, log, config, runnerRAG, incident.Runner(), workorder.Runner(), kubernetes, indexerr, database)
+	router.InitRouter(ctx, r, log, config, runnerRAG, incident.Runner(), kubernetes, indexerr, database)
 	// 启动 HTTP 服务
 	addr := fmt.Sprintf("%s:%d", config.Server.Host, config.Server.Port)
 	if err = r.Run(addr); err != nil {

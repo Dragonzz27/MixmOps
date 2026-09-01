@@ -28,7 +28,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func InitRouter(ctx context.Context, r *gin.Engine, loger *logrus.Logger, config *config.Config, runner compose.Runnable[document.Source, bool], incidentRunner compose.Runnable[*shared.UserMessage, *schema.Message], workOrderRunner compose.Runnable[*shared.UserMessage, *schema.Message], kube kuberepo.KubernetesRepository, docIndexer indexer.QdranIndexerServer, database *sqlite.DB) {
+func InitRouter(ctx context.Context, r *gin.Engine, loger *logrus.Logger, config *config.Config, runner compose.Runnable[document.Source, bool], incidentRunner compose.Runnable[*shared.UserMessage, *schema.Message], kube kuberepo.KubernetesRepository, docIndexer indexer.QdranIndexerServer, database *sqlite.DB) {
 	const maintenanceDocumentRoot = "../maintenance-documents"
 	//cors
 	corsConfig := cors.DefaultConfig()
@@ -107,16 +107,8 @@ func InitRouter(ctx context.Context, r *gin.Engine, loger *logrus.Logger, config
 	r.POST("/incidents/:id/actions/:action_id/confirm", incidentActions.Confirm())
 	r.POST("/incidents/:id/actions/:action_id/reject", incidentActions.Reject())
 	r.POST("/incidents/:id/resolve", modes.ResolveIncident())
-	r.GET("/work-orders", modes.WorkOrders())
-	r.POST("/work-orders", modes.CreateWorkOrder())
-	r.GET("/work-orders/:id", modes.WorkOrder())
-	r.POST("/work-orders/:id/complete", modes.CompleteWorkOrder())
-	r.POST("/work-orders/:id/cancel", modes.CancelWorkOrder())
-	conversationHandler := handler.NewConversationHandler(conversation.NewService(cs, incidentRunner, workOrderRunner))
+	conversationHandler := handler.NewConversationHandler(conversation.NewService(cs, incidentRunner))
 	r.GET("/incidents/:id/messages", conversationHandler.History(conversation.OwnerIncident))
 	r.POST("/incidents/:id/chat", conversationHandler.Chat(conversation.OwnerIncident))
 	r.POST("/incidents/:id/chatStream", conversationHandler.Stream(conversation.OwnerIncident))
-	r.GET("/work-orders/:id/messages", conversationHandler.History(conversation.OwnerWorkOrder))
-	r.POST("/work-orders/:id/chat", conversationHandler.Chat(conversation.OwnerWorkOrder))
-	r.POST("/work-orders/:id/chatStream", conversationHandler.Stream(conversation.OwnerWorkOrder))
 }
