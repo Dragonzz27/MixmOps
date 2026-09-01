@@ -29,12 +29,23 @@ type Agent struct {
 func (a *Agent) Runner() compose.Runnable[*shared.UserMessage, *schema.Message] { return a.runner }
 
 func NewAgent(ctx context.Context, cfg *config.Config, kube kuberepo.KubernetesRepository) (*Agent, error) {
+	agentTimeout, err := parseTimeout(cfg.Incident.AgentTimeout, 5*time.Minute, "Incident Agent")
+	if err != nil {
+		return nil, err
+	}
+	workerTimeout, err := parseTimeout(cfg.Incident.WorkerTimeout, 75*time.Second, "Incident Specialist")
+	if err != nil {
+		return nil, err
+	}
 	registry, prompt := loadPersona("incident-coordinator", systemPrompt)
 	r, err := airuntime.BuildScopedAgent(ctx, cfg, kube, "incident", prompt)
 	if err != nil {
 		return nil, err
 	}
-	r, err = airuntime.Wrap(r, "incident-coordinator", registry, 90*time.Second)
+	// Incident diagnosis may include several bounded tool calls before the
+	// final model response. Keep the overall conversation deadline above the
+	// sum of those tool budgets; individual tools still enforce 10-15s limits.
+	r, err = airuntime.Wrap(r, "incident-coordinator", registry, agentTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -54,7 +65,7 @@ func NewAgent(ctx context.Context, cfg *config.Config, kube kuberepo.KubernetesR
 		if buildErr != nil {
 			return nil, fmt.Errorf("initialize %s: %w", spec.name, buildErr)
 		}
-		runner, buildErr = airuntime.Wrap(runner, spec.name, reg, 60*time.Second)
+		runner, buildErr = airuntime.Wrap(runner, spec.name, reg, workerTimeout)
 		if buildErr != nil {
 			return nil, fmt.Errorf("wrap %s runtime: %w", spec.name, buildErr)
 		}
@@ -62,7 +73,7 @@ func NewAgent(ctx context.Context, cfg *config.Config, kube kuberepo.KubernetesR
 			return nil, buildErr
 		}
 	}
-	coordinated, err := withCoordinator(r, coordinator)
+	coordinated, err := withCoordinator(r, coordinator, workerTimeout+5*time.Second)
 	if err != nil {
 		return nil, err
 	}
@@ -78,18 +89,20 @@ func (a *Agent) Investigate(ctx context.Context, in SpecialistInput, names []str
 	return a.coordinator.Investigate(ctx, in, names)
 }
 
-func withCoordinator(base compose.Runnable[*shared.UserMessage, *schema.Message], coordinator *Coordinator) (compose.Runnable[*shared.UserMessage, *schema.Message], error) {
+func withCoordinator(base compose.Runnable[*shared.UserMessage, *schema.Message], coordinator *Coordinator, workerTimeout time.Duration) (compose.Runnable[*shared.UserMessage, *schema.Message], error) {
 	prepare := func(ctx context.Context, in *shared.UserMessage) *shared.UserMessage {
 		// Worker fan-out is performed for the first turn only. Later turns use
 		// the persisted conversation and can request targeted tools themselves.
 		if coordinator == nil || len(in.History) > 0 {
 			return in
 		}
-		results := coordinator.Investigate(ctx, SpecialistInput{IncidentID: in.ID, Task: in.Query}, []string{"specialist-kubernetes", "specialist-observability", "specialist-logs", "specialist-runbook"})
+		workerCtx, cancel := context.WithTimeout(ctx, workerTimeout)
+		defer cancel()
+		results := coordinator.Investigate(workerCtx, SpecialistInput{IncidentID: in.ID, Task: truncateText(in.Query, 30000)}, []string{"specialist-kubernetes", "specialist-observability", "specialist-logs", "specialist-runbook"})
 		var evidence strings.Builder
 		for _, result := range results {
 			evidence.WriteString("\n[专家 " + result.AgentName + "]\n")
-			evidence.WriteString(result.Summary)
+			evidence.WriteString(truncateText(result.Summary, 8000))
 			if len(result.Errors) > 0 {
 				evidence.WriteString("\n错误：" + strings.Join(result.Errors, "; "))
 			}
@@ -138,6 +151,25 @@ func withCoordinator(base compose.Runnable[*shared.UserMessage, *schema.Message]
 		return nil, err
 	}
 	return graph.Compile(context.Background(), compose.WithGraphName("incidentCoordinator"))
+}
+
+func parseTimeout(value string, fallback time.Duration, label string) (time.Duration, error) {
+	if strings.TrimSpace(value) == "" {
+		return fallback, nil
+	}
+	duration, err := time.ParseDuration(value)
+	if err != nil || duration <= 0 {
+		return 0, fmt.Errorf("invalid %s timeout %q", label, value)
+	}
+	return duration, nil
+}
+
+func truncateText(value string, maxRunes int) string {
+	runes := []rune(value)
+	if len(runes) <= maxRunes {
+		return value
+	}
+	return string(runes[:maxRunes]) + "\n...<context truncated>"
 }
 
 func loadPersona(name, fallback string) (*airuntime.Registry, string) {

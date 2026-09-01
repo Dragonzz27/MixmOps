@@ -126,6 +126,9 @@ func (r *Runtime) Stream(ctx context.Context, in RunInput, emit Emit) error {
 			return nil
 		}
 		if e != nil {
+			if errors.Is(e, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				return fmt.Errorf("agent %s timed out after %s: %w", in.AgentName, r.timeout, context.DeadlineExceeded)
+			}
 			return e
 		}
 		if emit != nil {

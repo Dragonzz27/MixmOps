@@ -25,6 +25,8 @@ type IncidentConfig struct {
 	AllowedActions      string `mapstructure:"allowed_actions"`
 	MaxReplicas         int32  `mapstructure:"max_replicas"`
 	RequireConfirmation bool   `mapstructure:"require_confirmation"`
+	AgentTimeout        string `mapstructure:"agent_timeout"`
+	WorkerTimeout       string `mapstructure:"worker_timeout"`
 }
 
 // ServerConfig 服务器配置
@@ -181,7 +183,7 @@ func bindEnvironment(v *viper.Viper) {
 		"openai.api_key": "OPENAI_API_KEY", "openai.model": "OPENAI_MODEL", "openai.api_base": "OPENAI_API_BASE",
 		"prometheus.url": "PROMETHEUS_URL", "kubernetes.enabled": "AUTOOPS_K8S_ENABLED", "kubernetes.kubeconfig": "AUTOOPS_K8S_KUBECONFIG", "kubernetes.context": "AUTOOPS_K8S_CONTEXT", "kubernetes.namespace": "AUTOOPS_K8S_NAMESPACE", "kubernetes.in_cluster": "AUTOOPS_K8S_IN_CLUSTER", "log.level": "AUTOOPS_LOG_LEVEL", "log.file": "AUTOOPS_LOG_FILE",
 		"background.enabled": "AUTOOPS_BACKGROUND_ENABLED", "background.poll_interval": "AUTOOPS_BACKGROUND_POLL_INTERVAL", "background.namespace": "AUTOOPS_BACKGROUND_NAMESPACE", "background.auto_repair_enabled": "AUTOOPS_AUTO_REPAIR_ENABLED", "background.auto_repair_alerts": "AUTOOPS_AUTO_REPAIR_ALERTS", "background.severe_alerts": "AUTOOPS_SEVERE_ALERTS", "background.max_restarts": "AUTOOPS_AUTO_REPAIR_MAX_RESTARTS", "background.cooldown": "AUTOOPS_AUTO_REPAIR_COOLDOWN",
-		"incident.actions_enabled": "AUTOOPS_INCIDENT_ACTIONS_ENABLED", "incident.allowed_actions": "AUTOOPS_INCIDENT_ALLOWED_ACTIONS", "incident.max_replicas": "AUTOOPS_INCIDENT_MAX_REPLICAS", "incident.require_confirmation": "AUTOOPS_INCIDENT_REQUIRE_CONFIRMATION",
+		"incident.actions_enabled": "AUTOOPS_INCIDENT_ACTIONS_ENABLED", "incident.allowed_actions": "AUTOOPS_INCIDENT_ALLOWED_ACTIONS", "incident.max_replicas": "AUTOOPS_INCIDENT_MAX_REPLICAS", "incident.require_confirmation": "AUTOOPS_INCIDENT_REQUIRE_CONFIRMATION", "incident.agent_timeout": "AUTOOPS_INCIDENT_AGENT_TIMEOUT", "incident.worker_timeout": "AUTOOPS_INCIDENT_WORKER_TIMEOUT",
 	} {
 		_ = v.BindEnv(key, env)
 	}
@@ -204,6 +206,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("incident.allowed_actions", "delete_managed_pod,rollout_restart_deployment,rollback_deployment,scale_deployment")
 	v.SetDefault("incident.max_replicas", 3)
 	v.SetDefault("incident.require_confirmation", true)
+	v.SetDefault("incident.agent_timeout", "5m")
+	v.SetDefault("incident.worker_timeout", "75s")
 
 	// Embedder 默认值
 	v.SetDefault("embedding.provider", "openai")

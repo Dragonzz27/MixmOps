@@ -121,7 +121,11 @@ func BuildScopedAgent(ctx context.Context, cfg *config.Config, kube kuberepo.Kub
 		return nil, err
 	}
 
-	agent, err := react.NewAgent(ctx, &react.AgentConfig{ToolCallingModel: chatModel, ToolsConfig: compose.ToolsNodeConfig{Tools: registered}})
+	maxStep := 12
+	if definition, ok := personaDefinition(mode); ok && definition.MaxTurns > 0 {
+		maxStep = definition.MaxTurns
+	}
+	agent, err := react.NewAgent(ctx, &react.AgentConfig{ToolCallingModel: chatModel, ToolsConfig: compose.ToolsNodeConfig{Tools: registered}, MaxStep: maxStep})
 	if err != nil {
 		return nil, err
 	}
@@ -140,6 +144,21 @@ func BuildScopedAgent(ctx context.Context, cfg *config.Config, kube kuberepo.Kub
 	_ = graph.AddEdge("prompt", "agent")
 	_ = graph.AddEdge("agent", compose.END)
 	return graph.Compile(ctx, compose.WithGraphName(mode+"Agent"))
+}
+
+func personaDefinition(mode string) (AgentDefinition, bool) {
+	name := map[string]string{"incident": "incident-coordinator", "background": "background-remediation", "specialist-kubernetes": "specialist-kubernetes", "specialist-observability": "specialist-observability", "specialist-logs": "specialist-logs", "specialist-runbook": "specialist-runbook"}[mode]
+	if name == "" {
+		return AgentDefinition{}, false
+	}
+	for _, root := range []string{"agents", "backend/agents", "../backend/agents", "../agents"} {
+		if reg, err := Load(root); err == nil {
+			if def, ok := reg.Get(name); ok {
+				return def, true
+			}
+		}
+	}
+	return AgentDefinition{}, false
 }
 
 func applyPersonaToolPolicy(ctx context.Context, mode string, candidates []tool.BaseTool) ([]tool.BaseTool, error) {

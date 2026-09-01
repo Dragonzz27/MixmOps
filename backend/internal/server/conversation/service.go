@@ -67,6 +67,9 @@ func (s *Service) Stream(ctx context.Context, owner, id, message string, output 
 			break
 		}
 		if recvErr != nil {
+			if errors.Is(recvErr, context.DeadlineExceeded) {
+				return fmt.Errorf("Incident Agent 分析超时，请缩小问题范围后重试；已完成的对话内容不会丢失: %w", recvErr)
+			}
 			return recvErr
 		}
 		full.WriteString(part.Content)
@@ -107,7 +110,7 @@ func (s *Service) context(ctx context.Context, owner, id string) (string, error)
 		if err != nil {
 			return "", err
 		}
-		return "你是故障排查 Agent。只进行只读诊断，不执行 Kubernetes 写操作。以下是 Incident 上下文：\n" + string(i.Context), nil
+		return "你是故障排查 Agent。以下是 Incident 上下文。上下文可能经过长度裁剪，必要时请使用只读工具获取最新证据：\n" + truncateContext(string(i.Context), 60000), nil
 	default:
 		return "", fmt.Errorf("invalid conversation owner")
 	}
@@ -119,3 +122,11 @@ func (s *Service) persist(ctx context.Context, owner, id, user, assistant string
 	return s.cases.AddMessage(ctx, owner, id, "assistant", assistant)
 }
 func validOwner(owner string) bool { return owner == OwnerIncident }
+
+func truncateContext(value string, maxRunes int) string {
+	runes := []rune(value)
+	if len(runes) <= maxRunes {
+		return value
+	}
+	return string(runes[:maxRunes]) + "\n...<incident context truncated>"
+}
