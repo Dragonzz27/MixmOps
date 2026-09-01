@@ -40,21 +40,23 @@ type Message struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 type IncidentAction struct {
-	ID           string          `json:"id"`
-	IncidentID   string          `json:"incident_id"`
-	ActionType   string          `json:"action_type"`
-	Namespace    string          `json:"namespace"`
-	Target       string          `json:"target"`
-	Payload      json.RawMessage `json:"payload"`
-	Reason       string          `json:"reason"`
-	Risk         string          `json:"risk"`
-	Rollback     string          `json:"rollback"`
-	Verification string          `json:"verification"`
-	Status       string          `json:"status"`
-	ConfirmedBy  string          `json:"confirmed_by,omitempty"`
-	Result       string          `json:"result,omitempty"`
-	Error        string          `json:"error,omitempty"`
-	CreatedAt    time.Time       `json:"created_at"`
+	ID              string          `json:"id"`
+	IncidentID      string          `json:"incident_id"`
+	ActionType      string          `json:"action_type"`
+	Namespace       string          `json:"namespace"`
+	Target          string          `json:"target"`
+	ResourceVersion string          `json:"resource_version,omitempty"`
+	Payload         json.RawMessage `json:"payload"`
+	Reason          string          `json:"reason"`
+	Risk            string          `json:"risk"`
+	Impact          string          `json:"impact"`
+	Rollback        string          `json:"rollback"`
+	Verification    string          `json:"verification"`
+	Status          string          `json:"status"`
+	ConfirmedBy     string          `json:"confirmed_by,omitempty"`
+	Result          string          `json:"result,omitempty"`
+	Error           string          `json:"error,omitempty"`
+	CreatedAt       time.Time       `json:"created_at"`
 }
 type Service struct{ db *sql.DB }
 
@@ -181,8 +183,8 @@ func (s *Service) ProposeIncidentAction(ctx context.Context, incidentID string, 
 	if !validIncidentActions[a.ActionType] {
 		return a, fmt.Errorf("unsupported incident action %q", a.ActionType)
 	}
-	if a.Namespace != "autoops-test" {
-		return a, fmt.Errorf("namespace outside policy")
+	if a.Namespace == "" {
+		return a, fmt.Errorf("namespace is required")
 	}
 	a.ID = uuid.New().String()
 	a.IncidentID = incidentID
@@ -191,37 +193,50 @@ func (s *Service) ProposeIncidentAction(ctx context.Context, incidentID string, 
 	if len(a.Payload) == 0 {
 		a.Payload = json.RawMessage(`{}`)
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO incident_actions(id,incident_id,action_type,namespace,target,payload,reason,risk,rollback,verification,status,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`, a.ID, a.IncidentID, a.ActionType, a.Namespace, a.Target, string(a.Payload), a.Reason, a.Risk, a.Rollback, a.Verification, a.Status, a.CreatedAt.Format(time.RFC3339Nano))
+	_, err := s.db.ExecContext(ctx, `INSERT INTO incident_actions(id,incident_id,action_type,namespace,target,resource_version,payload,reason,impact,risk,rollback,verification,status,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, a.ID, a.IncidentID, a.ActionType, a.Namespace, a.Target, a.ResourceVersion, string(a.Payload), a.Reason, a.Impact, a.Risk, a.Rollback, a.Verification, a.Status, a.CreatedAt.Format(time.RFC3339Nano))
 	return a, err
 }
 func (s *Service) GetIncidentAction(ctx context.Context, id string) (IncidentAction, error) {
 	var a IncidentAction
 	var payload, created string
-	err := s.db.QueryRowContext(ctx, `SELECT id,incident_id,action_type,namespace,target,payload,reason,risk,rollback,verification,status,confirmed_by,result,error,created_at FROM incident_actions WHERE id=?`, id).Scan(&a.ID, &a.IncidentID, &a.ActionType, &a.Namespace, &a.Target, &payload, &a.Reason, &a.Risk, &a.Rollback, &a.Verification, &a.Status, &a.ConfirmedBy, &a.Result, &a.Error, &created)
+	err := s.db.QueryRowContext(ctx, `SELECT id,incident_id,action_type,namespace,target,resource_version,payload,reason,impact,risk,rollback,verification,status,confirmed_by,result,error,created_at FROM incident_actions WHERE id=?`, id).Scan(&a.ID, &a.IncidentID, &a.ActionType, &a.Namespace, &a.Target, &a.ResourceVersion, &payload, &a.Reason, &a.Impact, &a.Risk, &a.Rollback, &a.Verification, &a.Status, &a.ConfirmedBy, &a.Result, &a.Error, &created)
 	a.Payload = json.RawMessage(payload)
 	a.CreatedAt, _ = time.Parse(time.RFC3339Nano, created)
 	return a, err
 }
 func (s *Service) ConfirmIncidentAction(ctx context.Context, id, by string) (IncidentAction, error) {
-	_, err := s.db.ExecContext(ctx, `UPDATE incident_actions SET status='confirmed',confirmed_by=?,confirmed_at=? WHERE id=? AND status='pending_confirmation'`, by, time.Now().UTC().Format(time.RFC3339Nano), id)
+	res, err := s.db.ExecContext(ctx, `UPDATE incident_actions SET status='confirmed',confirmed_by=?,confirmed_at=? WHERE id=? AND status='pending_confirmation'`, by, time.Now().UTC().Format(time.RFC3339Nano), id)
 	if err != nil {
 		return IncidentAction{}, err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return IncidentAction{}, fmt.Errorf("action is not pending confirmation")
 	}
 	return s.GetIncidentAction(ctx, id)
 }
 func (s *Service) RejectIncidentAction(ctx context.Context, id, by string) (IncidentAction, error) {
-	_, err := s.db.ExecContext(ctx, `UPDATE incident_actions SET status='rejected',confirmed_by=?,confirmed_at=? WHERE id=? AND status='pending_confirmation'`, by, time.Now().UTC().Format(time.RFC3339Nano), id)
+	res, err := s.db.ExecContext(ctx, `UPDATE incident_actions SET status='rejected',confirmed_by=?,confirmed_at=? WHERE id=? AND status='pending_confirmation'`, by, time.Now().UTC().Format(time.RFC3339Nano), id)
 	if err != nil {
 		return IncidentAction{}, err
 	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return IncidentAction{}, fmt.Errorf("action is not pending confirmation")
+	}
 	return s.GetIncidentAction(ctx, id)
+}
+
+// AddTimeline records coordinator, worker and action-broker events in the
+// same durable audit stream used by background tasks.
+func (s *Service) AddTimeline(ctx context.Context, ownerType, ownerID, eventName, status, output, eventErr string) error {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO agent_timeline(id,owner_type,owner_id,event_type,event_name,status,output,error,created_at) VALUES(?,?,?,?,?,?,?,?,?)`, uuid.New().String(), ownerType, ownerID, "agent", eventName, status, output, eventErr, time.Now().UTC().Format(time.RFC3339Nano))
+	return err
 }
 func (s *Service) SetIncidentActionResult(ctx context.Context, id, status, result, actionErr string) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE incident_actions SET status=?,result=?,error=?,executed_at=? WHERE id=? AND status IN ('confirmed','executing')`, status, result, actionErr, time.Now().UTC().Format(time.RFC3339Nano), id)
 	return err
 }
 func (s *Service) ListIncidentActions(ctx context.Context, incidentID string) ([]IncidentAction, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id,incident_id,action_type,namespace,target,payload,reason,risk,rollback,verification,status,confirmed_by,result,error,created_at FROM incident_actions WHERE incident_id=? ORDER BY created_at`, incidentID)
+	rows, err := s.db.QueryContext(ctx, `SELECT id,incident_id,action_type,namespace,target,resource_version,payload,reason,impact,risk,rollback,verification,status,confirmed_by,result,error,created_at FROM incident_actions WHERE incident_id=? ORDER BY created_at`, incidentID)
 	if err != nil {
 		return nil, err
 	}
@@ -230,7 +245,7 @@ func (s *Service) ListIncidentActions(ctx context.Context, incidentID string) ([
 	for rows.Next() {
 		var a IncidentAction
 		var payload, created string
-		if err := rows.Scan(&a.ID, &a.IncidentID, &a.ActionType, &a.Namespace, &a.Target, &payload, &a.Reason, &a.Risk, &a.Rollback, &a.Verification, &a.Status, &a.ConfirmedBy, &a.Result, &a.Error, &created); err != nil {
+		if err := rows.Scan(&a.ID, &a.IncidentID, &a.ActionType, &a.Namespace, &a.Target, &a.ResourceVersion, &payload, &a.Reason, &a.Impact, &a.Risk, &a.Rollback, &a.Verification, &a.Status, &a.ConfirmedBy, &a.Result, &a.Error, &created); err != nil {
 			return nil, err
 		}
 		a.Payload = json.RawMessage(payload)

@@ -2,9 +2,11 @@ package backgroundagent
 
 import (
 	"context"
+	"time"
 
 	kuberepo "AutoOps/internal/repo/kubernetes"
 	shared "AutoOps/internal/server/ai/agent/shared"
+	airuntime "AutoOps/internal/server/ai/runtime"
 	"AutoOps/pkg/config"
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
@@ -17,11 +19,27 @@ type Agent struct {
 }
 
 func NewAgent(ctx context.Context, cfg *config.Config, kube kuberepo.KubernetesRepository) (*Agent, error) {
-	r, err := shared.BuildScopedAgent(ctx, cfg, kube, "background", systemPrompt)
+	registry, prompt := loadPersona("background-remediation", systemPrompt)
+	r, err := airuntime.BuildScopedAgent(ctx, cfg, kube, "background", prompt)
+	if err != nil {
+		return nil, err
+	}
+	r, err = airuntime.Wrap(r, "background-remediation", registry, 90*time.Second)
 	if err != nil {
 		return nil, err
 	}
 	return &Agent{runner: r}, nil
+}
+
+func loadPersona(name, fallback string) (*airuntime.Registry, string) {
+	for _, root := range []string{"agents", "backend/agents", "../backend/agents", "../agents"} {
+		if reg, err := airuntime.Load(root); err == nil {
+			if def, ok := reg.Get(name); ok && def.Prompt != "" {
+				return reg, def.Prompt + "\n\n" + fallback
+			}
+		}
+	}
+	return nil, fallback
 }
 func (a *Agent) Runner() compose.Runnable[*shared.UserMessage, *schema.Message] { return a.runner }
 func (a *Agent) Analyze(ctx context.Context, taskID, evidence string) (string, error) {

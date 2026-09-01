@@ -2,6 +2,7 @@ package supervisor
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"strings"
 	"sync"
@@ -17,6 +18,14 @@ import (
 type Processor interface {
 	Process(context.Context, string) error
 }
+
+// FailureHandler is optional. Remediation implementations can use it to
+// hand a failed workflow to Incident instead of leaving a task as a generic
+// failed record. Keeping this optional preserves the small Supervisor
+// dependency and makes it straightforward to test with a fake Processor.
+type FailureHandler interface {
+	Handoff(context.Context, string, string) error
+}
 type Supervisor struct {
 	tasks         *background.Service
 	processor     Processor
@@ -25,6 +34,7 @@ type Supervisor struct {
 	cancel        context.CancelFunc
 	mu            sync.RWMutex
 	lastPoll      time.Time
+	lastSuccess   time.Time
 	lastError     string
 }
 
@@ -41,6 +51,10 @@ func (s *Supervisor) Start(ctx context.Context) {
 	}
 	child, cancel := context.WithCancel(ctx)
 	s.cancel = cancel
+	// Recover tasks that were in-flight before a process restart before the
+	// first Prometheus poll. Reconcile is intentionally idempotent; the
+	// remediation agent owns the per-task execution lock.
+	_ = s.Reconcile(child)
 	go func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
@@ -86,10 +100,51 @@ func (s *Supervisor) Schedule(taskID string) {
 		workCtx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		defer cancel()
 		if e := s.processor.Process(workCtx, taskID); e != nil {
-			_ = s.tasks.SetStatus(context.Background(), taskID, background.StatusFailed)
-			_ = s.tasks.Timeline(context.Background(), taskID, "remediation_failed", "failed", e.Error())
+			bgctx := context.Background()
+			if h, ok := s.processor.(FailureHandler); ok {
+				if handoffErr := h.Handoff(bgctx, taskID, e.Error()); handoffErr == nil {
+					return
+				}
+			}
+			_ = s.tasks.SetStatus(bgctx, taskID, background.StatusFailed)
+			_ = s.tasks.Timeline(bgctx, taskID, "remediation_failed", "failed", e.Error())
 		}
 	}()
+}
+
+// CreateIncident exposes an idempotent manual handoff for operators when an
+// automatic handoff failed or a task needs escalation from the task page.
+func (s *Supervisor) CreateIncident(ctx context.Context, taskID, reason string) error {
+	h, ok := s.processor.(FailureHandler)
+	if !ok {
+		return fmt.Errorf("remediation processor does not support incident handoff")
+	}
+	return h.Handoff(ctx, taskID, reason)
+}
+
+// Kind and Reconcile implement operations.Reconciler. The Supervisor only
+// discovers unfinished tasks and schedules them; it never performs workflow
+// work itself.
+func (s *Supervisor) Kind() string { return "background_supervisor" }
+
+func (s *Supervisor) Reconcile(ctx context.Context) error {
+	if s.tasks == nil || s.processor == nil {
+		return nil
+	}
+	tasks, err := s.tasks.List(ctx)
+	if err != nil {
+		return err
+	}
+	for _, task := range tasks {
+		switch task.Status {
+		case background.StatusReceived, background.StatusCollecting,
+			background.StatusAnalyzing, background.StatusClassifying,
+			"policy_evaluating", background.StatusAutoRepairPending,
+			background.StatusAutoRepairing, background.StatusWaitingVerification:
+			s.Schedule(task.ID)
+		}
+	}
+	return nil
 }
 func (s *Supervisor) poll(ctx context.Context) {
 	s.mu.Lock()
@@ -106,12 +161,30 @@ func (s *Supervisor) poll(ctx context.Context) {
 		log.Printf("background prometheus poll failed: %v", err)
 		return
 	}
+	s.mu.Lock()
+	s.lastSuccess = time.Now().UTC()
+	s.lastError = ""
+	s.mu.Unlock()
 	for _, a := range result.Alerts {
 		_, _, _ = s.HandleAlert(ctx, background.Alert{Fingerprint: a.Fingerprint, Name: a.AlertName, Namespace: s.cfg.Namespace, Labels: map[string]string{"alertname": a.AlertName, "severity": a.Severity}, Annotations: map[string]string{"description": a.Description}})
 	}
 }
 func (s *Supervisor) Status() map[string]any {
 	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return map[string]any{"enabled": s.cfg.Enabled, "last_poll_at": s.lastPoll, "last_error": s.lastError}
+	lastPoll, lastSuccess, lastError := s.lastPoll, s.lastSuccess, s.lastError
+	s.mu.RUnlock()
+	active := 0
+	if s.tasks != nil {
+		if tasks, err := s.tasks.List(context.Background()); err == nil {
+			for _, task := range tasks {
+				switch task.Status {
+				case background.StatusReceived, background.StatusCollecting, background.StatusAnalyzing,
+					background.StatusClassifying, "policy_evaluating", background.StatusAutoRepairPending,
+					background.StatusAutoRepairing, background.StatusWaitingVerification:
+					active++
+				}
+			}
+		}
+	}
+	return map[string]any{"enabled": s.cfg.Enabled, "last_poll_at": lastPoll, "last_success_at": lastSuccess, "last_error": lastError, "active_tasks": active}
 }

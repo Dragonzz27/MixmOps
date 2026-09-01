@@ -50,6 +50,7 @@ type KubernetesObservationRepository interface {
 	GetDeploymentConditions(context.Context, string, string) ([]ConditionInfo, error)
 	ListRolloutRevisions(context.Context, string, string) ([]RevisionInfo, error)
 	GetPodOwner(context.Context, string, string) (OwnerInfo, error)
+	GetResourceVersion(context.Context, string, string, string) (string, error)
 }
 type IncidentActions interface {
 	DeleteManagedPod(context.Context, string, string) error

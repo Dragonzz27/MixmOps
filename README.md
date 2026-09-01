@@ -1,26 +1,25 @@
 # AutoOps
 
-智能运维值班代理系统 - 融合 RAG、ReAct 与 Plan-Execute-Replan 三大 AI 范式的智能运维平台。
+智能运维平台 - 以证据驱动的 Agent Runtime 连接 Prometheus、Minikube、维护文档和受控 Kubernetes 操作。
 
 ## 项目简介
 
-AutoOps 是一个面向运维场景的智能代理系统，深度融合三种 AI Agent 核心技术：
+AutoOps 面向本地 Minikube 测试集群，提供三个相互隔离的业务 Agent：
 
 - **RAG (检索增强生成)** - 基于向量数据库的知识检索，将内部运维文档、告警处理手册转化为可检索的知识库，为 Agent 提供领域知识支撑
 
-- **ReAct (推理+行动)** - 对话场景下的工具调用范式，Agent 通过"思考-行动-观察"循环，自主选择工具（时间查询、知识检索、告警获取）完成用户意图
+- **Incident Coordinator/Workers** - 故障排查协调器派发 Kubernetes、Prometheus、日志和维护文档专家，汇总根因和恢复方案
 
-- **Plan-Execute-Replan (规划-执行-重规划)** - 复杂运维任务的自主执行框架，Agent 先制定执行计划，按步骤执行，并根据执行结果动态调整后续计划，实现多步骤任务的闭环处理
+- **Background Remediation** - 后台以 Plan-Execute-Replan 处理低风险告警，失败或严重故障自动接力 Incident
 
-三者协同工作：**RAG** 提供知识基础，**ReAct** 处理单轮工具调用，**Plan-Execute-Replan** 编排多步骤任务流程，共同实现从告警发现、知识检索到处理建议生成的全链路自动化运维分析。
+三类 Agent 共享统一 Runtime、工具注册和审计时间线，但 Prompt、会话、权限和上下文完全隔离。任何 Kubernetes 写操作都必须经过 Proposal、Policy、用户确认、Executor 和 Verifier。
 
 ## 功能特性
 
-- **智能对话** - ReAct Agent 驱动的多轮对话，支持流式响应与工具自主调用
-- **知识库管理** - Markdown 文档自动解析、向量化与索引构建
-- **告警分析** - 自动获取 Prometheus 活跃告警，匹配内部处理方案
-- **RAG 检索** - 语义相似度匹配，从知识库精准检索处理步骤
-- **自主规划** - Plan-Execute-Replan 架构实现复杂任务的多步骤编排与动态调整
+- **故障排查** - Incident Coordinator 与 Kubernetes、Prometheus、日志、维护文档专家协作，并与人工多轮对话
+- **后台自动处置** - Supervisor 监听告警，Remediation Agent 以 Plan-Execute-Replan 低风险修复，失败自动创建 Incident
+- **日常运维工单** - Work Order Agent 生成部署计划、YAML、Shell、风险和回滚步骤，不自动执行
+- **维护文档 / RAG** - Markdown 文档自动解析、向量化与类型化检索
 
 ## 技术架构
 
@@ -32,14 +31,14 @@ AutoOps 是一个面向运维场景的智能代理系统，深度融合三种 AI
 │  ├── /upload    - 文件上传 & 知识库索引                      │
 │││  └── /incidents - 故障排查与 Agent 交互                       │
 ├─────────────────────────────────────────────────────────────┤
-│  Agent Layer (CloudWeGo Eino)                               │
-│  ├── ReAct Agent     - 对话代理 (工具调用)                   │
-│  └── Plan-Execute    - 运维分析代理 (多步骤任务)             │
+│  Agent Runtime (CloudWeGo Eino)                             │
+│  ├── Incident Coordinator + read-only Specialists            │
+│  ├── Background Remediation Plan-Execute-Replan              │
+│  └── Work Order Agent                                         │
 ├─────────────────────────────────────────────────────────────┤
 │  Tools                                                      │
-│  ├── Time Tool           - 获取当前时间                      │
-│  ├── RAG Tool            - 知识库检索                        │
-│  └── Prometheus Tool     - 告警查询                          │
+│  ├── Observation / Knowledge / Proposal tools                 │
+│  └── Action Broker (Policy → Executor → Verifier)             │
 ├─────────────────────────────────────────────────────────────┤
 │  Storage                                                    │
 │  ├── Qdrant      - 向量数据库                                │
@@ -247,18 +246,14 @@ AutoOps/
 │   │       └── retriever/
 │   └── server/                 # 业务逻辑层
 │       ├── ai/
-│       │   ├── agent/          # AI Agent 实现
-│       │   │   ├── chat/       # 对话 Agent
-│       │   │   ├── knowledge_index/  # 知识库索引 Agent
-│       │   │   └── plan_execute_replan/  # 运维 Agent
+│       │   ├── agent/{incident,workorder,background,knowledge_index}
+│       │   ├── runtime/        # Persona、工具权限和运行时
 │       │   ├── embeder/        # Embedding 服务
-│       │   ├── model/          # LLM 模型封装
-│       │   └── tools/          # Agent 工具
-│       │       ├── metrics_alerts.go  # Prometheus 工具
-│       │       ├── rag.go      # RAG 检索工具
-│       │       └── time.go     # 时间工具
-│       ├── knowledge_index/    # 知识库索引服务
-│       └── plan/               # 运维计划服务
+│       │   └── tools/           # 观测、RAG、生成和动作提案工具
+│       ├── background/          # Supervisor + Remediation 工作流
+│       ├── incident/action/     # Proposal/Policy/Executor/Verifier
+│       ├── operations/          # SQLite 持久化协调与锁
+│       └── cases/               # Incident、工单、消息和时间线
 │   ├── pkg/                    # 配置、日志和通用工具
 │   ├── scripts/                # 后端辅助脚本
 │   ├── tests/prometheus-test-server/ # Prometheus 测试服务器
@@ -270,19 +265,21 @@ AutoOps/
 
 ## 核心组件
 
-### 1. ReAct Agent (对话代理)
+### 1. Agent Runtime 与 Persona 注册
 
-基于 ReAct (Reasoning + Acting) 模式的智能代理，能够：
-- 自动选择合适的工具
-- 多步推理和执行
-- 记忆会话上下文
+`backend/agents/*.md` 使用 YAML Front Matter 描述 Agent 的能力、工具白名单、禁用工具、权限模式和最大轮数。Runtime 统一负责 Persona 加载、超时、取消、流式输出和执行边界。
 
-### 2. Plan-Execute-Replan Agent (运维代理)
+### 2. Incident Coordinator / Specialists
 
-多步骤任务执行框架：
-- **Plan** - 根据目标生成执行计划
-- **Execute** - 按计划逐步执行
-- **Replan** - 根据执行结果动态调整计划
+Coordinator 将故障拆分给 Kubernetes、Observability、Logs 和 Runbook 专家。专家只返回结构化证据，Coordinator 汇总事实、假设、风险和下一步；写操作只能先创建待确认 Proposal。
+
+### 3. Background Remediation
+
+Supervisor 只监听 Alertmanager/Prometheus、去重并调度任务。Remediation Agent 负责 Plan → Policy → Execute → Observe → Replan，最多三轮；仅允许策略批准的受控 Pod 自动修复，其他情况可靠接力 Incident。
+
+### 4. Action Broker
+
+Incident 动作经过 Proposal、Policy、ResourceVersion 前置校验、用户确认、Executor 和 Verifier。支持删除受控 Pod、滚动重启、回滚和有限扩缩容，不通过 shell 调用 kubectl。
 
 ### 3. RAG 工具
 

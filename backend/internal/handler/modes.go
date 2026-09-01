@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"strings"
 
 	"AutoOps/internal/repo/kubernetes"
@@ -86,6 +87,28 @@ func (h *ModeHandler) RetryTask() gin.HandlerFunc {
 		c.JSON(202, gin.H{"message": "background remediation scheduled"})
 	}
 }
+func (h *ModeHandler) CreateIncidentFromTask() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if h.supervisor == nil {
+			c.JSON(503, gin.H{"message": "background supervisor unavailable"})
+			return
+		}
+		if _, err := h.background.Get(c.Request.Context(), c.Param("id")); err != nil {
+			c.JSON(404, gin.H{"message": err.Error()})
+			return
+		}
+		reason := c.Query("reason")
+		if reason == "" {
+			reason = "manual operator escalation"
+		}
+		if err := h.supervisor.CreateIncident(c.Request.Context(), c.Param("id"), reason); err != nil {
+			c.JSON(500, gin.H{"message": err.Error()})
+			return
+		}
+		task, _ := h.background.Get(c.Request.Context(), c.Param("id"))
+		c.JSON(201, task)
+	}
+}
 func (h *ModeHandler) CancelTask() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if err := h.background.SetStatus(c.Request.Context(), c.Param("id"), background.StatusCancelled); err != nil {
@@ -115,7 +138,16 @@ func (h *ModeHandler) Task() gin.HandlerFunc {
 		c.JSON(200, t)
 	}
 }
-func (h *ModeHandler) TaskTimeline() gin.HandlerFunc { return func(c *gin.Context) { timeline,err:=h.background.TimelineList(c.Request.Context(),c.Param("id"));if err!=nil{c.JSON(500,gin.H{"message":err.Error()});return};c.JSON(200,gin.H{"timeline":timeline}) } }
+func (h *ModeHandler) TaskTimeline() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		timeline, err := h.background.TimelineList(c.Request.Context(), c.Param("id"))
+		if err != nil {
+			c.JSON(500, gin.H{"message": err.Error()})
+			return
+		}
+		c.JSON(200, gin.H{"timeline": timeline})
+	}
+}
 func (h *ModeHandler) Approve() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		t, err := h.background.Approve(c.Request.Context(), c.Param("id"), c.GetHeader("X-Operator"))
@@ -221,6 +253,36 @@ func (h *ModeHandler) CreateIsolationTask() gin.HandlerFunc {
 		}
 		c.JSON(201, t)
 	}
+}
+func (h *ModeHandler) IncidentRuns() gin.HandlerFunc {
+	return func(c *gin.Context) { h.audit(c, "incident", "runs") }
+}
+func (h *ModeHandler) IncidentWorkers() gin.HandlerFunc {
+	return func(c *gin.Context) { h.audit(c, "incident", "workers") }
+}
+func (h *ModeHandler) IncidentToolCalls() gin.HandlerFunc {
+	return func(c *gin.Context) { h.audit(c, "incident", "tool-calls") }
+}
+func (h *ModeHandler) audit(c *gin.Context, ownerType, kind string) {
+	var (
+		items []map[string]any
+		err   error
+	)
+	switch kind {
+	case "runs":
+		items, err = h.cases.AgentRuns(c.Request.Context(), ownerType, c.Param("id"))
+	case "workers":
+		items, err = h.cases.AgentWorkers(c.Request.Context(), ownerType, c.Param("id"))
+	case "tool-calls":
+		items, err = h.cases.AgentToolCalls(c.Request.Context(), ownerType, c.Param("id"))
+	default:
+		err = fmt.Errorf("unsupported audit resource")
+	}
+	if err != nil {
+		c.JSON(500, gin.H{"message": err.Error()})
+		return
+	}
+	c.JSON(200, gin.H{kind: items})
 }
 func (h *ModeHandler) WorkOrders() gin.HandlerFunc {
 	return func(c *gin.Context) {

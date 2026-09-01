@@ -12,6 +12,7 @@ import (
 	backgroundagent "AutoOps/internal/server/ai/agent/background"
 	"AutoOps/internal/server/background"
 	"AutoOps/internal/server/cases"
+	"AutoOps/internal/server/operations"
 	"AutoOps/pkg/config"
 )
 
@@ -46,11 +47,16 @@ type Agent struct {
 	kube    kuberepo.KubernetesRepository
 	cfg     config.BackgroundConfig
 	llm     *backgroundagent.Agent
+	locks   *operations.Locks
 	running sync.Map
 }
 
-func New(tasks *background.Service, cs *cases.Service, kube kuberepo.KubernetesRepository, cfg config.BackgroundConfig, llm *backgroundagent.Agent) *Agent {
-	return &Agent{tasks: tasks, cases: cs, kube: kube, cfg: cfg, llm: llm}
+func New(tasks *background.Service, cs *cases.Service, kube kuberepo.KubernetesRepository, cfg config.BackgroundConfig, llm *backgroundagent.Agent, locks ...*operations.Locks) *Agent {
+	var lockStore *operations.Locks
+	if len(locks) > 0 {
+		lockStore = locks[0]
+	}
+	return &Agent{tasks: tasks, cases: cs, kube: kube, cfg: cfg, llm: llm, locks: lockStore}
 }
 
 func (a *Agent) Process(parent context.Context, taskID string) error {
@@ -90,7 +96,22 @@ func (a *Agent) Process(parent context.Context, taskID string) error {
 		}
 		_ = a.tasks.SetStatus(ctx, taskID, background.StatusAutoRepairPending)
 		_ = a.tasks.SetRepair(ctx, taskID, "pending", "")
-		actions := a.kube.(kuberepo.PodActions)
+		actions, ok := a.kube.(kuberepo.PodActions)
+		if !ok {
+			return a.createIncident(ctx, task, evidence, decision, plan, "pod action capability unavailable")
+		}
+		lockKey := "pod:" + task.Namespace + "/" + plan.Pod
+		if a.locks != nil {
+			acquired, lockErr := a.locks.Acquire(ctx, lockKey, "background_task", task.ID, TaskTimeout)
+			if lockErr != nil || !acquired {
+				reason := "target Pod is being remediated by another task"
+				if lockErr != nil {
+					reason = lockErr.Error()
+				}
+				return a.createIncident(ctx, task, evidence, decision, plan, reason)
+			}
+			defer a.locks.Release(context.Background(), lockKey, task.ID)
+		}
 		_ = a.tasks.SetStatus(ctx, taskID, background.StatusAutoRepairing)
 		_ = a.tasks.Timeline(ctx, taskID, "repair_started", "success", plan.Pod)
 		if err := actions.DeleteManagedPod(ctx, task.Namespace, plan.Pod); err != nil {
@@ -122,6 +143,33 @@ func (a *Agent) Process(parent context.Context, taskID string) error {
 		return a.createIncident(ctx, task, evidence, decision, plan, "maximum replanning rounds reached")
 	}
 	return nil
+}
+
+// Handoff is used by the Supervisor when a workflow exits unexpectedly. It
+// turns an execution error into the same Incident handoff path used by policy
+// and verification failures, making failures actionable instead of silently
+// ending as an opaque task error.
+func (a *Agent) Handoff(ctx context.Context, taskID, reason string) error {
+	task, err := a.tasks.Get(ctx, taskID)
+	if err != nil {
+		return err
+	}
+	if task.IncidentID != "" {
+		return nil
+	}
+	evidence := Evidence{Alert: background.Alert{Fingerprint: task.Fingerprint, Name: task.AlertName, Namespace: task.Namespace, Labels: task.Labels, Annotations: task.Annotations}}
+	if len(task.EvidenceSnapshot) > 0 {
+		_ = json.Unmarshal(task.EvidenceSnapshot, &evidence)
+	}
+	decision := Decision{Severity: string(task.Severity), Reason: task.SeverityReason, ProposedAction: "create_incident", RequiresHuman: true}
+	if len(task.DecisionSnapshot) > 0 {
+		_ = json.Unmarshal(task.DecisionSnapshot, &decision)
+	}
+	plan := ActionPlan{Action: "create_incident", Reason: reason}
+	if len(task.PlanSnapshot) > 0 {
+		_ = json.Unmarshal(task.PlanSnapshot, &plan)
+	}
+	return a.createIncident(ctx, task, evidence, decision, plan, reason)
 }
 
 type Observation struct {
@@ -163,7 +211,7 @@ func (a *Agent) observe(ctx context.Context, t background.Task, p ActionPlan) Ob
 	return o
 }
 func (a *Agent) collect(ctx context.Context, t background.Task) Evidence {
-	e := Evidence{Alert: background.Alert{Fingerprint: t.Fingerprint, Name: t.AlertName, Namespace: t.Namespace}, Logs: map[string]string{}}
+	e := Evidence{Alert: background.Alert{Fingerprint: t.Fingerprint, Name: t.AlertName, Namespace: t.Namespace, Labels: t.Labels, Annotations: t.Annotations}, Logs: map[string]string{}}
 	if a.kube == nil {
 		e.Errors = append(e.Errors, "Kubernetes integration unavailable")
 		return e

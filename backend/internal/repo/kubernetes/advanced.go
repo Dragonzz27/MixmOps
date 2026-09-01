@@ -8,6 +8,25 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
+func (r *repository) GetResourceVersion(ctx context.Context, ns, kind, name string) (string, error) {
+	switch kind {
+	case "pod":
+		p, err := r.client.CoreV1().Pods(ns).Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return "", err
+		}
+		return p.ResourceVersion, nil
+	case "deployment":
+		d, err := r.client.AppsV1().Deployments(ns).Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return "", err
+		}
+		return d.ResourceVersion, nil
+	default:
+		return "", fmt.Errorf("unsupported resource kind %q", kind)
+	}
+}
+
 func (r *repository) GetDeploymentYAML(ctx context.Context, ns, name string) ([]byte, error) {
 	d, e := r.client.AppsV1().Deployments(ns).Get(ctx, name, metav1.GetOptions{})
 	if e != nil {

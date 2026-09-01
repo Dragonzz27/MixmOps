@@ -2,11 +2,14 @@ package tools
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/cloudwego/eino/components/tool"
@@ -61,15 +64,19 @@ func QueryPrometheusAlerts(url string) (PrometheusAlertsOutput, error) {
 	alerts := make([]SimplifiedAlert, 0)
 	for _, alert := range result.Data.Alerts {
 		name := alert.Labels["alertname"]
-		if seen[name] {
+		fingerprint := alert.Labels["fingerprint"]
+		if fingerprint == "" {
+			fingerprint = fingerprintFor(alert.Labels, alert.Annotations)
+		}
+		if seen[fingerprint] {
 			continue
 		}
-		seen[name] = true
+		seen[fingerprint] = true
 		severity := alert.Labels["severity"]
 		if severity == "" {
 			severity = "unknown"
 		}
-		alerts = append(alerts, SimplifiedAlert{Fingerprint: alert.Labels["fingerprint"], AlertName: name, Description: alert.Annotations["description"], State: alert.State, ActiveAt: alert.ActiveAt, Duration: calculateActiveTime(alert.ActiveAt), Severity: severity})
+		alerts = append(alerts, SimplifiedAlert{Fingerprint: fingerprint, AlertName: name, Description: alert.Annotations["description"], State: alert.State, ActiveAt: alert.ActiveAt, Duration: calculateActiveTime(alert.ActiveAt), Severity: severity})
 	}
 	return PrometheusAlertsOutput{Success: true, Alerts: alerts, Message: fmt.Sprintf("Successfully retrieved %d active alerts", len(alerts))}, nil
 }
@@ -87,6 +94,10 @@ func queryPrometheusAlerts(url string) (PrometheusAlertsResult, error) {
 		return result, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		return result, fmt.Errorf("Prometheus alerts returned HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return result, err
@@ -95,7 +106,33 @@ func queryPrometheusAlerts(url string) (PrometheusAlertsResult, error) {
 	if err != nil {
 		return result, err
 	}
+	if result.Status != "success" {
+		if result.Error == "" {
+			result.Error = "Prometheus returned a non-success status"
+		}
+		return result, fmt.Errorf("Prometheus alerts query failed: %s", result.Error)
+	}
 	return result, nil
+}
+
+func fingerprintFor(labels, annotations map[string]string) string {
+	keys := make([]string, 0, len(labels)+len(annotations))
+	for key := range labels {
+		keys = append(keys, "l:"+key)
+	}
+	for key := range annotations {
+		keys = append(keys, "a:"+key)
+	}
+	sort.Strings(keys)
+	var b strings.Builder
+	for _, key := range keys {
+		if strings.HasPrefix(key, "l:") {
+			b.WriteString(key + "=" + labels[strings.TrimPrefix(key, "l:")] + "\n")
+		} else {
+			b.WriteString(key + "=" + annotations[strings.TrimPrefix(key, "a:")] + "\n")
+		}
+	}
+	return fmt.Sprintf("prom-%x", sha256.Sum256([]byte(b.String())))[:20]
 }
 
 // 计算从activeAt到当前时间的间隔

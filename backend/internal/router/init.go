@@ -14,9 +14,11 @@ import (
 	"AutoOps/internal/server/conversation"
 	knowledgeindex "AutoOps/internal/server/knowledge_index"
 	maintenancedocument "AutoOps/internal/server/maintenance_document"
+	"AutoOps/internal/server/operations"
 	"AutoOps/pkg/config"
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/cloudwego/eino/components/document"
 	"github.com/cloudwego/eino/compose"
@@ -60,14 +62,25 @@ func InitRouter(ctx context.Context, r *gin.Engine, loger *logrus.Logger, config
 	r.DELETE("/maintenance-documents/:name", maintenanceHandler.Delete())
 	bg := background.NewService(database.DB, kube)
 	cs := cases.NewService(database.DB)
+	locks := operations.NewLocks(database.DB)
 	modes := handler.NewModeHandler(bg, cs, kube)
 	remediationLLM, err := backgroundagent.NewAgent(ctx, config, kube)
 	if err != nil {
 		panic(fmt.Errorf("initialize background remediation agent: %w", err))
 	}
-	remediationAgent := backgroundremediation.New(bg, cs, kube, config.Background, remediationLLM)
+	remediationAgent := backgroundremediation.New(bg, cs, kube, config.Background, remediationLLM, locks)
 	supervisor := backgroundsupervisor.New(bg, remediationAgent, config.Background, config.GetPrometheusURL())
 	modes.SetSupervisor(supervisor)
+	// The durable coordinator recovers unfinished remediation tasks after a
+	// restart. It only invokes Supervisor.Reconcile, while the Supervisor
+	// remains responsible for discovery and scheduling.
+	interval, parseErr := time.ParseDuration(config.Background.PollInterval)
+	if parseErr != nil || interval <= 0 {
+		interval = 30 * time.Second
+	}
+	coordinator := operations.New(interval)
+	coordinator.Register(supervisor)
+	coordinator.Run(ctx)
 	supervisor.Start(ctx)
 	r.POST("/webhooks/alertmanager", modes.AlertmanagerWebhook())
 	r.GET("/background/status", modes.BackgroundStatus())
@@ -75,6 +88,7 @@ func InitRouter(ctx context.Context, r *gin.Engine, loger *logrus.Logger, config
 	r.GET("/background/tasks/:id", modes.Task())
 	r.GET("/background/tasks/:id/timeline", modes.TaskTimeline())
 	r.POST("/background/tasks/:id/retry", modes.RetryTask())
+	r.POST("/background/tasks/:id/create-incident", modes.CreateIncidentFromTask())
 	r.POST("/background/tasks/:id/cancel", modes.CancelTask())
 	r.POST("/background/tasks/:id/approve", modes.Approve())
 	r.POST("/background/tasks/:id/reject", modes.Reject())
@@ -84,6 +98,9 @@ func InitRouter(ctx context.Context, r *gin.Engine, loger *logrus.Logger, config
 	r.GET("/incidents/:id/context", modes.Incident())
 	r.POST("/incidents/:id/context/refresh", modes.RefreshIncidentContext())
 	r.POST("/incidents/:id/create-isolation-task", modes.CreateIsolationTask())
+	r.GET("/incidents/:id/runs", modes.IncidentRuns())
+	r.GET("/incidents/:id/workers", modes.IncidentWorkers())
+	r.GET("/incidents/:id/tool-calls", modes.IncidentToolCalls())
 	incidentActions := handler.NewIncidentActionHandler(cs, kube, config)
 	r.GET("/incidents/:id/actions", incidentActions.List())
 	r.POST("/incidents/:id/actions", incidentActions.Propose())

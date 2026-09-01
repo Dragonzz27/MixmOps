@@ -38,27 +38,30 @@ const (
 )
 
 type Task struct {
-	ID                  string          `json:"id"`
-	Fingerprint         string          `json:"alert_fingerprint"`
-	AlertName           string          `json:"alert_name"`
-	AlertSeverity       string          `json:"alert_severity,omitempty"`
-	Namespace           string          `json:"namespace"`
-	Status              string          `json:"status"`
-	TargetPod           string          `json:"target_pod,omitempty"`
-	Analysis            string          `json:"analysis,omitempty"`
-	ProposedAction      json.RawMessage `json:"proposed_action,omitempty"`
-	Severity            Severity        `json:"severity"`
-	SeverityReason      string          `json:"severity_reason,omitempty"`
-	RepairStatus        string          `json:"repair_status,omitempty"`
-	RepairResult        string          `json:"repair_result,omitempty"`
-	IncidentID          string          `json:"incident_id,omitempty"`
-	CurrentRound        int             `json:"current_round"`
-	MaxRounds           int             `json:"max_rounds"`
-	DecisionSnapshot    json.RawMessage `json:"decision,omitempty"`
-	PlanSnapshot        json.RawMessage `json:"plan,omitempty"`
-	ObservationSnapshot json.RawMessage `json:"observation,omitempty"`
-	CreatedAt           time.Time       `json:"created_at"`
-	UpdatedAt           time.Time       `json:"updated_at"`
+	ID                  string            `json:"id"`
+	Fingerprint         string            `json:"alert_fingerprint"`
+	AlertName           string            `json:"alert_name"`
+	AlertSeverity       string            `json:"alert_severity,omitempty"`
+	Labels              map[string]string `json:"labels,omitempty"`
+	Annotations         map[string]string `json:"annotations,omitempty"`
+	Namespace           string            `json:"namespace"`
+	Status              string            `json:"status"`
+	TargetPod           string            `json:"target_pod,omitempty"`
+	Analysis            string            `json:"analysis,omitempty"`
+	ProposedAction      json.RawMessage   `json:"proposed_action,omitempty"`
+	Severity            Severity          `json:"severity"`
+	SeverityReason      string            `json:"severity_reason,omitempty"`
+	RepairStatus        string            `json:"repair_status,omitempty"`
+	RepairResult        string            `json:"repair_result,omitempty"`
+	IncidentID          string            `json:"incident_id,omitempty"`
+	CurrentRound        int               `json:"current_round"`
+	MaxRounds           int               `json:"max_rounds"`
+	DecisionSnapshot    json.RawMessage   `json:"decision,omitempty"`
+	PlanSnapshot        json.RawMessage   `json:"plan,omitempty"`
+	ObservationSnapshot json.RawMessage   `json:"observation,omitempty"`
+	EvidenceSnapshot    json.RawMessage   `json:"evidence,omitempty"`
+	CreatedAt           time.Time         `json:"created_at"`
+	UpdatedAt           time.Time         `json:"updated_at"`
 }
 type Alert struct {
 	Fingerprint string            `json:"fingerprint"`
@@ -82,10 +85,12 @@ func (s *Service) CreateFromAlert(ctx context.Context, alert Alert) (Task, bool,
 	if ns == "" {
 		ns = "autoops-test"
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO background_tasks(id,alert_fingerprint,alert_name,namespace,alert_severity,status,severity,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)`, id, alert.Fingerprint, alert.Name, ns, alert.Labels["severity"], StatusReceived, string(SeverityUnknown), now, now)
+	labels, _ := json.Marshal(alert.Labels)
+	annotations, _ := json.Marshal(alert.Annotations)
+	_, err := s.db.ExecContext(ctx, `INSERT INTO background_tasks(id,alert_fingerprint,alert_name,namespace,alert_severity,alert_labels,alert_annotations,status,severity,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)`, id, alert.Fingerprint, alert.Name, ns, alert.Labels["severity"], string(labels), string(annotations), StatusReceived, string(SeverityUnknown), now, now)
 	if err != nil {
 		if isUnique(err) {
-			return s.getByFingerprint(ctx, alert.Fingerprint)
+			return s.getByKey(ctx, alert.Fingerprint, ns, alert.Name)
 		}
 		return Task{}, false, err
 	}
@@ -104,9 +109,9 @@ func contains(s, sub string) bool {
 	}
 	return false
 }
-func (s *Service) getByFingerprint(ctx context.Context, fp string) (Task, bool, error) {
+func (s *Service) getByKey(ctx context.Context, fp, namespace, alertName string) (Task, bool, error) {
 	var id string
-	err := s.db.QueryRowContext(ctx, `SELECT id FROM background_tasks WHERE alert_fingerprint=? AND status NOT IN ('resolved','failed','cancelled') LIMIT 1`, fp).Scan(&id)
+	err := s.db.QueryRowContext(ctx, `SELECT id FROM background_tasks WHERE alert_fingerprint=? AND namespace=? AND alert_name=? AND status NOT IN ('resolved','failed','cancelled') LIMIT 1`, fp, namespace, alertName).Scan(&id)
 	if err != nil {
 		return Task{}, false, err
 	}
@@ -114,7 +119,7 @@ func (s *Service) getByFingerprint(ctx context.Context, fp string) (Task, bool, 
 	return t, false, err
 }
 func (s *Service) List(ctx context.Context) ([]Task, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id,alert_fingerprint,alert_name,namespace,alert_severity,status,target_pod,analysis,proposed_action,severity,severity_reason,repair_status,repair_result,incident_id,current_round,max_rounds,decision_snapshot,plan_snapshot,observation_snapshot,created_at,updated_at FROM background_tasks ORDER BY created_at DESC`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id,alert_fingerprint,alert_name,namespace,alert_severity,alert_labels,alert_annotations,status,target_pod,analysis,proposed_action,severity,severity_reason,repair_status,repair_result,incident_id,current_round,max_rounds,decision_snapshot,plan_snapshot,observation_snapshot,evidence_snapshot,created_at,updated_at FROM background_tasks ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -134,7 +139,7 @@ func (s *Service) Get(ctx context.Context, id string) (Task, error) {
 	return t, err
 }
 func (s *Service) get(ctx context.Context, id string) (Task, bool, error) {
-	row := s.db.QueryRowContext(ctx, `SELECT id,alert_fingerprint,alert_name,namespace,alert_severity,status,target_pod,analysis,proposed_action,severity,severity_reason,repair_status,repair_result,incident_id,current_round,max_rounds,decision_snapshot,plan_snapshot,observation_snapshot,created_at,updated_at FROM background_tasks WHERE id=?`, id)
+	row := s.db.QueryRowContext(ctx, `SELECT id,alert_fingerprint,alert_name,namespace,alert_severity,alert_labels,alert_annotations,status,target_pod,analysis,proposed_action,severity,severity_reason,repair_status,repair_result,incident_id,current_round,max_rounds,decision_snapshot,plan_snapshot,observation_snapshot,evidence_snapshot,created_at,updated_at FROM background_tasks WHERE id=?`, id)
 	t, err := scanTask(row)
 	return t, true, err
 }
@@ -145,16 +150,18 @@ func scanTask(row scanner) (Task, error) {
 	var t Task
 	var created, updated sql.NullString
 	var fingerprint, alertName, namespace, status sql.NullString
-	var alertSeverity, targetPod, analysis, sev, severityReason, repairStatus, repairResult, incidentID sql.NullString
+	var alertSeverity, labels, annotations, targetPod, analysis, sev, severityReason, repairStatus, repairResult, incidentID sql.NullString
 	var currentRound, maxRounds sql.NullInt64
-	var decision, plan, observation sql.NullString
+	var decision, plan, observation, evidence sql.NullString
 	var action sql.NullString
-	err := row.Scan(&t.ID, &fingerprint, &alertName, &namespace, &alertSeverity, &status, &targetPod, &analysis, &action, &sev, &severityReason, &repairStatus, &repairResult, &incidentID, &currentRound, &maxRounds, &decision, &plan, &observation, &created, &updated)
+	err := row.Scan(&t.ID, &fingerprint, &alertName, &namespace, &alertSeverity, &labels, &annotations, &status, &targetPod, &analysis, &action, &sev, &severityReason, &repairStatus, &repairResult, &incidentID, &currentRound, &maxRounds, &decision, &plan, &observation, &evidence, &created, &updated)
 	t.Fingerprint = fingerprint.String
 	t.AlertName = alertName.String
 	t.Namespace = namespace.String
 	t.Status = status.String
 	t.AlertSeverity = alertSeverity.String
+	_ = json.Unmarshal([]byte(labels.String), &t.Labels)
+	_ = json.Unmarshal([]byte(annotations.String), &t.Annotations)
 	t.TargetPod = targetPod.String
 	t.Analysis = analysis.String
 	t.Severity = Severity(sev.String)
@@ -170,6 +177,7 @@ func scanTask(row scanner) (Task, error) {
 	t.DecisionSnapshot = json.RawMessage(decision.String)
 	t.PlanSnapshot = json.RawMessage(plan.String)
 	t.ObservationSnapshot = json.RawMessage(observation.String)
+	t.EvidenceSnapshot = json.RawMessage(evidence.String)
 	t.ProposedAction = json.RawMessage(action.String)
 	t.CreatedAt, _ = time.Parse(time.RFC3339Nano, created.String)
 	t.UpdatedAt, _ = time.Parse(time.RFC3339Nano, updated.String)
