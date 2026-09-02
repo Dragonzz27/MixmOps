@@ -2,6 +2,7 @@ package handler
 
 import (
 	"AutoOps/internal/server/conversation"
+	"encoding/json"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"net/http"
@@ -50,21 +51,33 @@ func (h *ConversationHandler) Stream(owner string) gin.HandlerFunc {
 		}
 		c.Header("Content-Type", "text/event-stream")
 		c.Header("Cache-Control", "no-cache")
-		ch := make(chan string, 8)
+		// Specialist fan-out can emit several lifecycle/tool events before the
+		// Eino stream returns its first assistant token. Keep enough buffer to
+		// avoid back-pressuring graph setup while the handler starts consuming.
+		ch := make(chan conversation.StreamEvent, 512)
 		errCh := make(chan error, 1)
 		go func() {
 			errCh <- h.service.Stream(c.Request.Context(), owner, c.Param("id"), in.Message, ch)
 			close(ch)
 		}()
-		for token := range ch {
-			c.SSEvent("message", fmt.Sprintf("data: %s", token))
+		for event := range ch {
+			payload, marshalErr := json.Marshal(event.Data)
+			if marshalErr != nil {
+				continue
+			}
+			sseType := event.Type
+			if sseType == "assistant" {
+				sseType = "assistant_token"
+			}
+			c.SSEvent(sseType, fmt.Sprintf("%s", payload))
 			c.Writer.Flush()
 		}
 		if err := <-errCh; err != nil {
-			c.SSEvent("error", err.Error())
+			body, _ := json.Marshal(map[string]string{"error": err.Error()})
+			c.SSEvent("error", string(body))
 			c.Writer.Flush()
 		} else {
-			c.SSEvent("message", "data: [DONE]")
+			c.SSEvent("done", `{"done":true}`)
 			c.Writer.Flush()
 		}
 	}

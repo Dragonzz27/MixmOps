@@ -263,6 +263,16 @@ func (h *ModeHandler) IncidentWorkers() gin.HandlerFunc {
 func (h *ModeHandler) IncidentToolCalls() gin.HandlerFunc {
 	return func(c *gin.Context) { h.audit(c, "incident", "tool-calls") }
 }
+func (h *ModeHandler) IncidentTimeline() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		items, err := h.cases.Timeline(c.Request.Context(), "incident", c.Param("id"))
+		if err != nil {
+			c.JSON(500, gin.H{"message": err.Error()})
+			return
+		}
+		c.JSON(200, gin.H{"timeline": items})
+	}
+}
 func (h *ModeHandler) audit(c *gin.Context, ownerType, kind string) {
 	var (
 		items []map[string]any

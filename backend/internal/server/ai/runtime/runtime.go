@@ -10,6 +10,8 @@ import (
 	"io"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // Runtime is the common lifecycle boundary for business agents. Business
@@ -38,11 +40,17 @@ func Wrap(runner compose.Runnable[*shared.UserMessage, *schema.Message], agentNa
 		reader, writer := schema.Pipe[*schema.Message](32)
 		go func() {
 			defer writer.Close()
-			err := rt.Stream(ctx, RunInput{AgentName: agentName, SessionID: in.ID, UserPrompt: in.Query, History: in.History}, func(event Event) {
+			forward := func(event Event) {
+				// Propagate lifecycle/tool events to the outer conversation sink.
+				// Assistant tokens still flow through the Eino stream below.
+				if event.Type != "assistant" {
+					EmitEvent(ctx, event)
+				}
 				if content, ok := event.Data.(string); ok {
 					writer.Send(schema.AssistantMessage(content, nil), nil)
 				}
-			})
+			}
+			err := rt.Stream(ctx, RunInput{AgentName: agentName, SessionID: in.ID, UserPrompt: in.Query, History: in.History}, forward)
 			if err != nil {
 				writer.Send(nil, err)
 			}
@@ -103,10 +111,25 @@ func (r *Runtime) Run(ctx context.Context, in RunInput) (RunOutput, error) {
 	ctx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 	started := time.Now().UTC()
+	runID := uuid.NewString()
+	ownerType, ownerID := in.OwnerType, in.OwnerID
+	if existing, ok := CurrentRun(ctx); ok && existing.RunID != "" {
+		runID = existing.RunID
+		if ownerType == "" {
+			ownerType = existing.OwnerType
+		}
+		if ownerID == "" {
+			ownerID = existing.OwnerID
+		}
+	}
+	ctx = WithRunContext(ctx, RunContext{RunID: runID, OwnerType: ownerType, OwnerID: ownerID})
+	EmitEvent(ctx, Event{Type: "run_started", Data: map[string]any{"run_id": runID, "agent": in.AgentName, "owner_type": ownerType, "owner_id": ownerID}})
 	out, err := runner.Invoke(ctx, &shared.UserMessage{ID: in.SessionID, Query: in.UserPrompt, History: in.History})
 	if err != nil {
+		EmitEvent(ctx, Event{Type: "run_failed", Data: map[string]any{"run_id": runID, "agent": in.AgentName, "error": boundedString(err.Error(), 4000)}})
 		return RunOutput{AgentName: in.AgentName, StartedAt: started, EndedAt: time.Now().UTC()}, err
 	}
+	EmitEvent(ctx, Event{Type: "run_completed", Data: map[string]any{"run_id": runID, "agent": in.AgentName}})
 	return RunOutput{AgentName: in.AgentName, Message: out, StartedAt: started, EndedAt: time.Now().UTC()}, nil
 }
 func (r *Runtime) Stream(ctx context.Context, in RunInput, emit Emit) error {
@@ -116,19 +139,42 @@ func (r *Runtime) Stream(ctx context.Context, in RunInput, emit Emit) error {
 	}
 	ctx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
+	runID := uuid.NewString()
+	ownerType, ownerID := in.OwnerType, in.OwnerID
+	if existing, ok := CurrentRun(ctx); ok {
+		if existing.RunID != "" {
+			runID = existing.RunID
+		}
+		if ownerType == "" {
+			ownerType = existing.OwnerType
+		}
+		if ownerID == "" {
+			ownerID = existing.OwnerID
+		}
+	}
+	ctx = WithRunContext(ctx, RunContext{RunID: runID, OwnerType: ownerType, OwnerID: ownerID})
+	if emit != nil {
+		ctx = WithEventSink(ctx, emit)
+	}
+	EmitEvent(ctx, Event{Type: "run_started", Data: map[string]any{"run_id": runID, "agent": in.AgentName, "owner_type": ownerType, "owner_id": ownerID}})
 	stream, err := runner.Stream(ctx, &shared.UserMessage{ID: in.SessionID, Query: in.UserPrompt, History: in.History})
 	if err != nil {
+		EmitEvent(ctx, Event{Type: "run_failed", Data: map[string]any{"run_id": runID, "agent": in.AgentName, "error": boundedString(err.Error(), 4000)}})
 		return err
 	}
 	for {
 		part, e := stream.Recv()
 		if errors.Is(e, io.EOF) {
+			EmitEvent(ctx, Event{Type: "run_completed", Data: map[string]any{"run_id": runID, "agent": in.AgentName}})
 			return nil
 		}
 		if e != nil {
 			if errors.Is(e, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
-				return fmt.Errorf("agent %s timed out after %s: %w", in.AgentName, r.timeout, context.DeadlineExceeded)
+				err := fmt.Errorf("agent %s timed out after %s: %w", in.AgentName, r.timeout, context.DeadlineExceeded)
+				EmitEvent(ctx, Event{Type: "run_failed", Data: map[string]any{"run_id": runID, "agent": in.AgentName, "error": boundedString(err.Error(), 4000)}})
+				return err
 			}
+			EmitEvent(ctx, Event{Type: "run_failed", Data: map[string]any{"run_id": runID, "agent": in.AgentName, "error": boundedString(e.Error(), 4000)}})
 			return e
 		}
 		if emit != nil {

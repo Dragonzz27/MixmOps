@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	kuberepo "AutoOps/internal/repo/kubernetes"
 	"AutoOps/internal/server/ai/agent/shared"
@@ -119,6 +120,17 @@ func BuildScopedAgent(ctx context.Context, cfg *config.Config, kube kuberepo.Kub
 	registered, err = applyPersonaToolPolicy(ctx, mode, registered)
 	if err != nil {
 		return nil, err
+	}
+	for index, candidate := range registered {
+		info, infoErr := candidate.Info(ctx)
+		if infoErr != nil || info == nil {
+			continue
+		}
+		class := ToolReadOnly
+		if strings.HasPrefix(info.Name, "propose_") {
+			class = ToolProposal
+		}
+		registered[index] = observeTool(ctx, candidate, class, 15*time.Second, 12000)
 	}
 
 	maxStep := 12

@@ -101,6 +101,7 @@ func InitRouter(ctx context.Context, r *gin.Engine, loger *logrus.Logger, config
 	r.GET("/incidents/:id/runs", modes.IncidentRuns())
 	r.GET("/incidents/:id/workers", modes.IncidentWorkers())
 	r.GET("/incidents/:id/tool-calls", modes.IncidentToolCalls())
+	r.GET("/incidents/:id/timeline", modes.IncidentTimeline())
 	incidentActions := handler.NewIncidentActionHandler(cs, kube, config)
 	r.GET("/incidents/:id/actions", incidentActions.List())
 	r.POST("/incidents/:id/actions", incidentActions.Propose())
