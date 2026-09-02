@@ -6,6 +6,7 @@ import router from './router'
 import './styles/common.css'
 import './styles/autoops.scss'
 import './styles/background.css'
+import './styles/incident-runtime.css'
 const app=createApp(App)
 Object.entries(naive).filter(([name])=>name.startsWith('N')).forEach(([name,component])=>app.component(name,component))
 app.use(createPinia()).use(router).mount('#app')
